@@ -116,7 +116,7 @@ fun EmptyState(icon: ImageVector, title: String, subtitle: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 96.dp, start = 32.dp, end = 32.dp),
+            .padding(top = 32.dp, start = 32.dp, end = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {

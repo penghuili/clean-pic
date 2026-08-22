@@ -8,6 +8,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -64,6 +65,9 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
     } else {
         AskNotificationPermissionOnce()
         Scaffold(
+            // Each tab owns its TopAppBar and its status-bar inset. Do not apply
+            // the same top inset again from this tab shell.
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             bottomBar = {
                 NavigationBar {
                     NavigationBarItem(
@@ -123,7 +127,11 @@ private fun PermissionScreen() {
             modifier = Modifier.size(132.dp)
         )
         Spacer(Modifier.height(12.dp))
-        Text("欢迎使用截图清理", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
+        Text(
+            "欢迎使用截图清理",
+            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
+            color = androidx.compose.material3.MaterialTheme.colorScheme.onBackground
+        )
         Spacer(Modifier.height(12.dp))
         Text(
             "自动清理手机里过期的截图，手动整理下载目录。\n\n" +
