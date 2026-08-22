@@ -37,8 +37,7 @@ class MediaRepository(private val context: Context) {
     }
 
     /**
-     * 查询系统截图目录里的图片（Pictures/Screenshots、DCIM/Screenshots、
-     * 以及部分厂商的「截屏 / 屏幕截图」相册），绝不动其他照片。
+     * 查询截图目录和 ChatGPT 目录里的图片，绝不动其他照片。
      */
     fun queryScreenshots(): List<ShotItem> {
         val bucketColumn = MediaStore.Images.Media.BUCKET_DISPLAY_NAME
@@ -47,13 +46,25 @@ class MediaRepository(private val context: Context) {
         if (Build.VERSION.SDK_INT >= 29) {
             selection = "(" + MediaStore.Images.Media.RELATIVE_PATH + " LIKE ?" +
                 " OR " + bucketColumn + " LIKE ?" +
-                " OR " + bucketColumn + " IN (?,?))"
-            args = listOf("%Screenshots%", "%Screenshot%", "截屏", "屏幕截图")
+                " OR " + bucketColumn + " IN (?,?)" +
+                " OR " + MediaStore.Images.Media.RELATIVE_PATH + " LIKE ?" +
+                " OR " + bucketColumn + " LIKE ? )"
+            args = listOf(
+                "%Screenshots%", "%Screenshot%", "截屏", "屏幕截图",
+                "%ChatGPT%", "%ChatGPT%"
+            )
         } else {
-            selection = "(" + bucketColumn + " LIKE ? OR " + bucketColumn + " IN (?,?))"
-            args = listOf("%Screenshot%", "截屏", "屏幕截图")
+            selection = "(" + MediaStore.Images.Media.DATA + " LIKE ?" +
+                " OR " + bucketColumn + " LIKE ?" +
+                " OR " + bucketColumn + " IN (?,?)" +
+                " OR " + MediaStore.Images.Media.DATA + " LIKE ?" +
+                " OR " + bucketColumn + " LIKE ? )"
+            args = listOf(
+                "%Screenshot%", "%Screenshot%", "截屏", "屏幕截图",
+                "%ChatGPT%", "%ChatGPT%"
+            )
         }
-        return queryImages(selection, args.toTypedArray()).filter { it.looksLikeScreenshot }
+        return queryImages(selection, args.toTypedArray()).filter { it.looksLikeManagedImage }
     }
 
     /** Images physically moved to the app's kept-images folder. */
@@ -114,16 +125,18 @@ class MediaRepository(private val context: Context) {
         return result
     }
 
-    /** 最后一道保险：只有路径或相册名确实是截图目录才允许删除 */
-    private val ShotItem.looksLikeScreenshot: Boolean
+    /** 最后一道保险：只有路径或相册名确实是受支持的图片目录才允许操作 */
+    private val ShotItem.looksLikeManagedImage: Boolean
         get() = path.contains("screenshot", true)
             || bucket.contains("screenshot", true)
             || bucket == "截屏"
             || bucket == "屏幕截图"
+            || path.contains("chatgpt", true)
+            || bucket.contains("chatgpt", true)
 
-    /** Move a screenshot out of all screenshot folders into the kept folder. */
+    /** Move a managed image out of its source folder into the kept folder. */
     fun moveShotToKept(item: ShotItem): Boolean {
-        if (!item.looksLikeScreenshot) return false
+        if (!item.looksLikeManagedImage) return false
         if (Build.VERSION.SDK_INT >= 29) {
             return try {
                 val values = ContentValues().apply {
@@ -188,7 +201,7 @@ class MediaRepository(private val context: Context) {
     }
 
     fun deleteShot(item: ShotItem): Boolean {
-        if (!item.looksLikeScreenshot) return false
+        if (!item.looksLikeManagedImage) return false
         val viaProvider = try {
             context.contentResolver.delete(item.uri, null, null) > 0
         } catch (_: Exception) {
@@ -203,7 +216,7 @@ class MediaRepository(private val context: Context) {
         }
     }
 
-    /** 删除超过 [olderThanMs] 的截图，跳过已保留项；返回 (删除数量, 释放字节数) */
+    /** 删除超过 [olderThanMs] 的受支持图片，跳过已保留项；返回 (删除数量, 释放字节数) */
     fun cleanOldScreenshots(
         olderThanMs: Long,
         keptPaths: Set<String>,

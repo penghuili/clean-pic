@@ -74,7 +74,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                         selected = tab == 0,
                         onClick = { tab = 0 },
                         icon = { Icon(Icons.Rounded.PhotoLibrary, contentDescription = null) },
-                        label = { Text("截图") }
+                        label = { Text("图片") }
                     )
                     NavigationBarItem(
                         selected = tab == 1,
@@ -134,8 +134,8 @@ private fun PermissionScreen() {
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "自动清理手机里过期的截图，手动整理下载目录。\n\n" +
-                "· 只识别「截图」相册，绝不碰你的其他照片\n" +
+            "自动清理手机里过期的图片，手动整理下载目录。\n\n" +
+                "· 只处理「截图」和「ChatGPT」文件夹，绝不碰其他照片\n" +
                 "· 已保留的内容永远不会被清理\n" +
                 "· 全部在本地完成，不联网、不上传",
             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,

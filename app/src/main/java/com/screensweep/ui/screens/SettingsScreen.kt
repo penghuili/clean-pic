@@ -149,7 +149,7 @@ fun SettingsScreen(vm: MainViewModel) {
 
             // ---------- 自动清理 ----------
             item {
-                SettingsCard(title = "自动清理截图") {
+                SettingsCard(title = "自动清理图片") {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Rounded.CleaningServices,
@@ -163,7 +163,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                "每天检查一次，删除超过保留天数的截图，完成后发通知",
+                                "每天检查一次，删除超过保留天数的截图和 ChatGPT 图片，完成后发通知",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -191,7 +191,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         enabled = s.autoCleanEnabled
                     )
                     Text(
-                        "更早的截图会被自动删除；保留的内容永远不会被动。",
+                        "更早的图片会被自动删除；保留的内容永远不会被动。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -200,8 +200,8 @@ fun SettingsScreen(vm: MainViewModel) {
                         onClick = {
                             vm.cleanNow { c, b ->
                                 message = if (c > 0)
-                                    "已清理 $c 张截图，释放 ${approximateSize(b)}"
-                                else "没有需要清理的截图"
+                                    "已清理 $c 张图片，释放 ${approximateSize(b)}"
+                                else "没有需要清理的图片"
                             }
                         },
                         enabled = storageOk

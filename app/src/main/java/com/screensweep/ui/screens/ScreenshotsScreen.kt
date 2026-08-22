@@ -109,7 +109,7 @@ fun ScreenshotsScreen(vm: MainViewModel) {
         val cutoff = System.currentTimeMillis() - days * 24L * 60 * 60 * 1000
         val older = shots.filter { it.addedMs < cutoff }
         if (older.isEmpty()) {
-            message = "没有 $days 天前的截图"
+            message = "没有 $days 天前的图片"
         } else {
             older.forEach { selected[it.id] = it }
         }
@@ -122,7 +122,7 @@ fun ScreenshotsScreen(vm: MainViewModel) {
                 TopAppBar(
                     title = {
                         Column {
-                            Text("截图", style = MaterialTheme.typography.titleLarge)
+                            Text("图片", style = MaterialTheme.typography.titleLarge)
                             Text(
                                 "共 ${shots.size} 张 · ${formatSize(context, totalSize)} · 长按多选",
                                 style = MaterialTheme.typography.labelMedium,
@@ -192,7 +192,7 @@ fun ScreenshotsScreen(vm: MainViewModel) {
             ) {
                 EmptyState(
                     icon = Icons.Rounded.PhotoLibrary,
-                    title = "没有需要清理的截图",
+                    title = "没有需要清理的图片",
                     subtitle = "下拉刷新，或去设置里开启自动清理"
                 )
             }
@@ -267,8 +267,8 @@ fun ScreenshotsScreen(vm: MainViewModel) {
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("删除 ${selected.size} 张截图？") },
-            text = { Text("删除后无法恢复。若想保留某些截图，可以先「保留」再清理。") },
+            title = { Text("删除 ${selected.size} 张图片？") },
+            text = { Text("删除后无法恢复。若想保留某些图片，可以先「保留」再清理。") },
             confirmButton = {
                 TextButton(
                     onClick = {

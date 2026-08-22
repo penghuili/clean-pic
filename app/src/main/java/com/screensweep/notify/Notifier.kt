@@ -42,7 +42,7 @@ object Notifier {
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val text = "清理了 $deletedCount 张过期截图，释放约 " +
+        val text = "清理了 $deletedCount 张过期图片，释放约 " +
             Formatter.formatShortFileSize(context, freedBytes)
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
