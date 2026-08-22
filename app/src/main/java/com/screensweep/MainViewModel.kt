@@ -13,9 +13,18 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private data class RefreshData(
+    val migratedPaths: Set<String>,
+    val migratedIds: Set<String>,
+    val shots: List<ShotItem>,
+    val keptShots: List<ShotItem>,
+    val downloads: List<DownloadItem>
+)
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -27,6 +36,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _shots = MutableStateFlow<List<ShotItem>>(emptyList())
     val shots: StateFlow<List<ShotItem>> = _shots.asStateFlow()
+
+    private val _keptShots = MutableStateFlow<List<ShotItem>>(emptyList())
+    val keptShots: StateFlow<List<ShotItem>> = _keptShots.asStateFlow()
 
     private val _downloads = MutableStateFlow<List<DownloadItem>>(emptyList())
     val downloads: StateFlow<List<DownloadItem>> = _downloads.asStateFlow()
@@ -41,10 +53,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() {
         viewModelScope.launch {
             _scanning.value = true
-            withContext(Dispatchers.IO) {
-                _shots.value = mediaRepo.queryScreenshots()
-                _downloads.value = mediaRepo.queryDownloads()
+            val savedSettings = settingsRepo.settings.first()
+            val data = withContext(Dispatchers.IO) {
+                // Older app versions only marked kept screenshots in DataStore.
+                // Move those files once so the folder becomes the source of truth.
+                val existingShots = mediaRepo.queryScreenshots()
+                val legacyKept = existingShots.filter {
+                    it.path in savedSettings.keptPaths || it.id.toString() in savedSettings.keptIds
+                }
+                val migrated = legacyKept.filter { mediaRepo.moveShotToKept(it) }
+                RefreshData(
+                    migratedPaths = migrated.map { it.path }.toSet(),
+                    migratedIds = migrated.map { it.id.toString() }.toSet(),
+                    shots = mediaRepo.queryScreenshots(),
+                    keptShots = mediaRepo.queryKeptScreenshots(),
+                    downloads = mediaRepo.queryDownloads()
+                )
             }
+            if (data.migratedPaths.isNotEmpty() || data.migratedIds.isNotEmpty()) {
+                settingsRepo.removeKeptItems(data.migratedPaths, data.migratedIds)
+            }
+            _shots.value = data.shots
+            _keptShots.value = data.keptShots
+            _downloads.value = data.downloads
             _scanning.value = false
         }
     }
@@ -85,14 +116,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun keepShots(items: List<ShotItem>, onDone: () -> Unit) {
+    fun keepShots(items: List<ShotItem>, onDone: (Int, Int) -> Unit) {
         viewModelScope.launch {
-            settingsRepo.keepItems(
-                items.map { it.path }.toSet(),
-                items.map { it.id.toString() }.toSet()
-            )
+            val (kept, failed) = withContext(Dispatchers.IO) {
+                var kept = 0
+                var failed = 0
+                items.forEach {
+                    if (mediaRepo.moveShotToKept(it)) kept++ else failed++
+                }
+                kept to failed
+            }
             refresh()
-            onDone()
+            onDone(kept, failed)
+        }
+    }
+
+    fun restoreKeptShot(item: ShotItem, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val restored = withContext(Dispatchers.IO) { mediaRepo.restoreKeptShot(item) }
+            refresh()
+            onDone(restored)
         }
     }
 

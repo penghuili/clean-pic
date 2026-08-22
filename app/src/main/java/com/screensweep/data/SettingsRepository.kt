@@ -51,6 +51,13 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun removeKeptItems(paths: Set<String>, ids: Set<String>) {
+        context.dataStore.edit { p ->
+            p[Keys.KEPT_PATHS] = (p[Keys.KEPT_PATHS] ?: emptySet()) - paths
+            p[Keys.KEPT_IDS] = (p[Keys.KEPT_IDS] ?: emptySet()) - ids
+        }
+    }
+
     suspend fun unkeepPath(path: String) {
         context.dataStore.edit { p ->
             p[Keys.KEPT_PATHS] = (p[Keys.KEPT_PATHS] ?: emptySet()) - path

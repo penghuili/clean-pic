@@ -1,11 +1,13 @@
 package com.screensweep.data
 
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.media.MediaScannerConnection
 import java.io.File
 
 data class ShotItem(
@@ -29,23 +31,16 @@ data class DownloadItem(
 
 class MediaRepository(private val context: Context) {
 
+    companion object {
+        private const val KEPT_RELATIVE_PATH = "Pictures/ScreenSweep/Kept/"
+        private const val SCREENSHOTS_RELATIVE_PATH = "Pictures/Screenshots/"
+    }
+
     /**
      * 查询系统截图目录里的图片（Pictures/Screenshots、DCIM/Screenshots、
      * 以及部分厂商的「截屏 / 屏幕截图」相册），绝不动其他照片。
      */
     fun queryScreenshots(): List<ShotItem> {
-        val projection = mutableListOf(
-            MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.DISPLAY_NAME,
-            MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
-            MediaStore.Images.Media.DATE_ADDED,
-            MediaStore.Images.Media.SIZE,
-            MediaStore.Images.Media.DATA
-        )
-        if (Build.VERSION.SDK_INT >= 29) {
-            projection.add(MediaStore.Images.Media.RELATIVE_PATH)
-        }
-
         val bucketColumn = MediaStore.Images.Media.BUCKET_DISPLAY_NAME
         val selection: String
         val args: List<String>
@@ -58,6 +53,35 @@ class MediaRepository(private val context: Context) {
             selection = "(" + bucketColumn + " LIKE ? OR " + bucketColumn + " IN (?,?))"
             args = listOf("%Screenshot%", "截屏", "屏幕截图")
         }
+        return queryImages(selection, args.toTypedArray()).filter { it.looksLikeScreenshot }
+    }
+
+    /** Images physically moved to the app's kept-images folder. */
+    fun queryKeptScreenshots(): List<ShotItem> {
+        val selection: String
+        val args: Array<String>
+        if (Build.VERSION.SDK_INT >= 29) {
+            selection = MediaStore.Images.Media.RELATIVE_PATH + " LIKE ?"
+            args = arrayOf("$KEPT_RELATIVE_PATH%")
+        } else {
+            selection = MediaStore.Images.Media.DATA + " LIKE ?"
+            args = arrayOf("${keptDirectory().absolutePath}${File.separator}%")
+        }
+        return queryImages(selection, args)
+    }
+
+    private fun queryImages(selection: String, args: Array<String>): List<ShotItem> {
+        val projection = mutableListOf(
+            MediaStore.Images.Media._ID,
+            MediaStore.Images.Media.DISPLAY_NAME,
+            MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
+            MediaStore.Images.Media.DATE_ADDED,
+            MediaStore.Images.Media.SIZE,
+            MediaStore.Images.Media.DATA
+        )
+        if (Build.VERSION.SDK_INT >= 29) {
+            projection.add(MediaStore.Images.Media.RELATIVE_PATH)
+        }
 
         val result = mutableListOf<ShotItem>()
         try {
@@ -65,7 +89,7 @@ class MediaRepository(private val context: Context) {
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 projection.toTypedArray(),
                 selection,
-                args.toTypedArray(),
+                args,
                 MediaStore.Images.Media.DATE_ADDED + " DESC"
             )?.use { c ->
                 val iId = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
@@ -87,7 +111,7 @@ class MediaRepository(private val context: Context) {
             }
         } catch (_: Exception) {
         }
-        return result.filter { it.looksLikeScreenshot }
+        return result
     }
 
     /** 最后一道保险：只有路径或相册名确实是截图目录才允许删除 */
@@ -96,6 +120,72 @@ class MediaRepository(private val context: Context) {
             || bucket.contains("screenshot", true)
             || bucket == "截屏"
             || bucket == "屏幕截图"
+
+    /** Move a screenshot out of all screenshot folders into the kept folder. */
+    fun moveShotToKept(item: ShotItem): Boolean {
+        if (!item.looksLikeScreenshot) return false
+        if (Build.VERSION.SDK_INT >= 29) {
+            return try {
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.RELATIVE_PATH, KEPT_RELATIVE_PATH)
+                }
+                context.contentResolver.update(item.uri, values, null, null) > 0
+            } catch (_: Exception) {
+                false
+            }
+        }
+        return moveLegacyFile(item.path, keptDirectory())
+    }
+
+    /** Restore a kept screenshot to the standard Pictures/Screenshots folder. */
+    fun restoreKeptShot(item: ShotItem): Boolean {
+        if (Build.VERSION.SDK_INT >= 29) {
+            return try {
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.RELATIVE_PATH, SCREENSHOTS_RELATIVE_PATH)
+                }
+                context.contentResolver.update(item.uri, values, null, null) > 0
+            } catch (_: Exception) {
+                false
+            }
+        }
+        return moveLegacyFile(item.path, screenshotsDirectory())
+    }
+
+    private fun keptDirectory(): File = File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+        "ScreenSweep/Kept"
+    )
+
+    private fun screenshotsDirectory(): File = File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+        "Screenshots"
+    )
+
+    private fun moveLegacyFile(sourcePath: String, targetDirectory: File): Boolean {
+        if (sourcePath.isEmpty()) return false
+        val source = File(sourcePath)
+        if (!source.isFile) return false
+        if (!targetDirectory.exists() && !targetDirectory.mkdirs()) return false
+
+        val extension = source.extension
+        val baseName = source.nameWithoutExtension
+        var target = File(targetDirectory, source.name)
+        var suffix = 1
+        while (target.exists()) {
+            val name = if (extension.isEmpty()) "$baseName-$suffix" else "$baseName-$suffix.$extension"
+            target = File(targetDirectory, name)
+            suffix++
+        }
+        if (!source.renameTo(target)) return false
+        MediaScannerConnection.scanFile(
+            context,
+            arrayOf(source.absolutePath, target.absolutePath),
+            arrayOf(null, null),
+            null
+        )
+        return true
+    }
 
     fun deleteShot(item: ShotItem): Boolean {
         if (!item.looksLikeScreenshot) return false

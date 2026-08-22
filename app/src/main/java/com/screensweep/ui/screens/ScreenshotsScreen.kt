@@ -166,8 +166,12 @@ fun ScreenshotsScreen(vm: MainViewModel) {
                     allSelected = selected.size == shots.size,
                     onKeep = {
                         val items = selected.values.toList()
-                        vm.keepShots(items) {
-                            message = "已保留 ${items.size} 项，不会再出现在列表里"
+                        vm.keepShots(items) { kept, failed ->
+                            message = if (failed == 0) {
+                                "已保留 $kept 项，已移到保留图片目录"
+                            } else {
+                                "已移动 $kept 项，$failed 项移动失败"
+                            }
                         }
                         selected.clear()
                     },
@@ -246,7 +250,9 @@ fun ScreenshotsScreen(vm: MainViewModel) {
             shot = shot,
             onDismiss = { preview = null },
             onKeep = {
-                vm.keepShots(listOf(shot)) { message = "已保留，不会再出现在列表里" }
+                vm.keepShots(listOf(shot)) { kept, _ ->
+                    if (kept > 0) message = "已保留，已移到保留图片目录"
+                }
                 preview = null
             },
             onDelete = {

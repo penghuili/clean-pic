@@ -67,6 +67,7 @@ import kotlin.math.roundToInt
 fun SettingsScreen(vm: MainViewModel) {
     val context = LocalContext.current
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val keptShots by vm.keptShots.collectAsStateWithLifecycle()
     val s = settings
 
     var storageOk by remember { mutableStateOf(Permissions.hasStorageAccess(context)) }
@@ -79,6 +80,7 @@ fun SettingsScreen(vm: MainViewModel) {
     var message by remember { mutableStateOf<String?>(null) }
     var showKept by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
+    val keptCount = (s?.keptPaths?.size ?: 0) + keptShots.size
 
     LaunchedEffect(message) {
         message?.let {
@@ -189,7 +191,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         enabled = s.autoCleanEnabled
                     )
                     Text(
-                        "更早的截图会被自动删除；标记为「保留」的内容永远不会被动。",
+                        "更早的截图会被自动删除；保留的内容永远不会被动。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -221,16 +223,19 @@ fun SettingsScreen(vm: MainViewModel) {
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
-                                "已保留 ${s.keptPaths.size} 项",
+                                "已保留 $keptCount 项",
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                "保留后不再出现在截图/下载列表里，也不会被自动清理",
+                                "截图会移到 Pictures/ScreenSweep/Kept，下载文件保留在原位置",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        TextButton(onClick = { showKept = true }, enabled = s.keptPaths.isNotEmpty()) {
+                        TextButton(
+                            onClick = { showKept = true },
+                            enabled = keptCount > 0
+                        ) {
                             Text("管理")
                         }
                     }
@@ -267,9 +272,38 @@ fun SettingsScreen(vm: MainViewModel) {
             confirmButton = {
                 TextButton(onClick = { showKept = false }) { Text("关闭") }
             },
-            title = { Text("保留项（${s.keptPaths.size}）") },
+            title = { Text("保留项（$keptCount）") },
             text = {
                 LazyColumn(Modifier.height(320.dp)) {
+                    items(keptShots, key = { it.id }) { shot ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 6.dp)
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    shot.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    "保留图片目录",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton24 {
+                                vm.restoreKeptShot(shot) { restored ->
+                                    message = if (restored) {
+                                        "已恢复到截图目录"
+                                    } else {
+                                        "恢复失败，请检查文件权限"
+                                    }
+                                }
+                            }
+                        }
+                    }
                     items(s.keptPaths.sorted()) { path ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
