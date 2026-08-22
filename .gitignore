@@ -1,0 +1,19 @@
+*.iml
+.gradle/
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+
+# Keystore 仅保留在本地，请自行备份，不要提交
+keystore.properties
+*.keystore
+*.jks
+
+# 构建产物
+*.apk
+*.aab
+app/build/

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 截图卡片 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,34 H56 A4,4 0 0 1 60,38 V62 A4,4 0 0 1 56,66 H32 A4,4 0 0 1 28,62 V38 A4,4 0 0 1 32,34 Z" />
+
+    <!-- 卡片里的太阳 -->
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M48,43 m-3,0 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0" />
+
+    <!-- 卡片里的山 -->
+    <path
+        android:fillColor="#5B5BD6"
+        android:pathData="M28,66 L40,50 L46,57 L51,52 L60,62 L60,66 Z" />
+
+    <!-- 扫帚柄 -->
+    <path
+        android:pathData="M74,28 L66,40"
+        android:strokeColor="#B26A00"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round" />
+
+    <!-- 扫帚头 -->
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M71.0,43.3 L61.0,36.7 L56.6,43.4 L66.6,50.0 Z" />
+
+    <!-- 灰尘星光 -->
+    <path
+        android:fillColor="#FFE082"
+        android:pathData="M74,47 L75,49 L77,50 L75,51 L74,53 L73,51 L71,50 L73,49 Z" />
+    <path
+        android:fillColor="#FFE082"
+        android:pathData="M67,55.2 L67.7,56.3 L68.8,57 L67.7,57.7 L67,58.8 L66.3,57.7 L65.2,57 L66.3,56.3 Z" />
+</vector>
