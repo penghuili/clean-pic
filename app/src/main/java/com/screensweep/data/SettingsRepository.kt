@@ -10,12 +10,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
+private val defaultAutoCleanFolders = ImageFolder.values().map { it.key }.toSet()
 
 data class Settings(
     val autoCleanEnabled: Boolean = false,
     val retainDays: Int = 7,
     val keptPaths: Set<String> = emptySet(),
-    val keptIds: Set<String> = emptySet()
+    val keptIds: Set<String> = emptySet(),
+    val autoCleanFolders: Set<String> = defaultAutoCleanFolders
 )
 
 class SettingsRepository(private val context: Context) {
@@ -25,6 +27,7 @@ class SettingsRepository(private val context: Context) {
         val DAYS = intPreferencesKey("retain_days")
         val KEPT_PATHS = stringSetPreferencesKey("kept_paths")
         val KEPT_IDS = stringSetPreferencesKey("kept_ids")
+        val AUTO_FOLDERS = stringSetPreferencesKey("auto_clean_folders")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { p ->
@@ -32,7 +35,8 @@ class SettingsRepository(private val context: Context) {
             autoCleanEnabled = p[Keys.AUTO] ?: false,
             retainDays = (p[Keys.DAYS] ?: 7).coerceIn(1, 90),
             keptPaths = p[Keys.KEPT_PATHS] ?: emptySet(),
-            keptIds = p[Keys.KEPT_IDS] ?: emptySet()
+            keptIds = p[Keys.KEPT_IDS] ?: emptySet(),
+            autoCleanFolders = p[Keys.AUTO_FOLDERS] ?: defaultAutoCleanFolders
         )
     }
 
@@ -42,6 +46,13 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setRetainDays(days: Int) {
         context.dataStore.edit { it[Keys.DAYS] = days.coerceIn(1, 90) }
+    }
+
+    suspend fun setAutoCleanFolder(folder: ImageFolder, enabled: Boolean) {
+        context.dataStore.edit { p ->
+            val current = p[Keys.AUTO_FOLDERS] ?: defaultAutoCleanFolders
+            p[Keys.AUTO_FOLDERS] = if (enabled) current + folder.key else current - folder.key
+        }
     }
 
     suspend fun keepItems(paths: Set<String>, ids: Set<String>) {

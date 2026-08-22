@@ -10,13 +10,23 @@ import android.provider.MediaStore
 import android.media.MediaScannerConnection
 import java.io.File
 
+enum class ImageFolder(val key: String, val label: String) {
+    SCREENSHOTS("screenshots", "截图"),
+    CHATGPT("chatgpt", "ChatGPT");
+
+    companion object {
+        fun fromKey(key: String): ImageFolder? = values().firstOrNull { it.key == key }
+    }
+}
+
 data class ShotItem(
     val id: Long,
     val name: String,
     val path: String,
     val bucket: String,
     val addedMs: Long,
-    val size: Long
+    val size: Long,
+    val folder: ImageFolder = ImageFolder.SCREENSHOTS
 ) {
     val uri: Uri
         get() = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
@@ -116,7 +126,11 @@ class MediaRepository(private val context: Context) {
                         path = if (iData >= 0) c.getString(iData) ?: "" else "",
                         bucket = if (iBucket >= 0) c.getString(iBucket) ?: "" else "",
                         addedMs = c.getLong(iDate) * 1000L,
-                        size = c.getLong(iSize)
+                        size = c.getLong(iSize),
+                        folder = classifyFolder(
+                            if (iData >= 0) c.getString(iData) ?: "" else "",
+                            if (iBucket >= 0) c.getString(iBucket) ?: "" else ""
+                        )
                     )
                 }
             }
@@ -124,6 +138,13 @@ class MediaRepository(private val context: Context) {
         }
         return result
     }
+
+    private fun classifyFolder(path: String, bucket: String): ImageFolder =
+        if (path.contains("chatgpt", true) || bucket.contains("chatgpt", true)) {
+            ImageFolder.CHATGPT
+        } else {
+            ImageFolder.SCREENSHOTS
+        }
 
     /** 最后一道保险：只有路径或相册名确实是受支持的图片目录才允许操作 */
     private val ShotItem.looksLikeManagedImage: Boolean
@@ -220,11 +241,13 @@ class MediaRepository(private val context: Context) {
     fun cleanOldScreenshots(
         olderThanMs: Long,
         keptPaths: Set<String>,
-        keptIds: Set<String>
+        keptIds: Set<String>,
+        enabledFolders: Set<ImageFolder>
     ): Pair<Int, Long> {
         var count = 0
         var bytes = 0L
         for (s in queryScreenshots()) {
+            if (s.folder !in enabledFolders) continue
             if (s.addedMs < olderThanMs && s.path !in keptPaths && s.id.toString() !in keptIds) {
                 if (deleteShot(s)) {
                     count++

@@ -37,6 +37,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +69,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.screensweep.MainViewModel
+import com.screensweep.data.ImageFolder
 import com.screensweep.data.ShotItem
 import com.screensweep.ui.components.EmptyState
 import com.screensweep.ui.components.SelectionBottomBar
@@ -82,6 +84,8 @@ fun ScreenshotsScreen(vm: MainViewModel) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val allShots by vm.shots.collectAsStateWithLifecycle()
 
+    val autoCleanFolders = settings?.autoCleanFolders
+        ?: ImageFolder.values().map { it.key }.toSet()
     val keptPaths = settings?.keptPaths ?: emptySet()
     val keptIds = settings?.keptIds ?: emptySet()
     val shots = remember(allShots, keptPaths, keptIds) {
@@ -145,6 +149,32 @@ fun ScreenshotsScreen(vm: MainViewModel) {
                         containerColor = MaterialTheme.colorScheme.surface
                     )
                 )
+                Row(
+                    modifier = Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "自动清理目录",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    ImageFolder.values().forEach { folder ->
+                        FilterChip(
+                            selected = folder.key in autoCleanFolders,
+                            onClick = {
+                                vm.setAutoCleanFolder(
+                                    folder,
+                                    folder.key !in autoCleanFolders
+                                )
+                            },
+                            label = { Text(folder.label) }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
                 Row(
                     modifier = Modifier
                         .horizontalScroll(rememberScrollState())

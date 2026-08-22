@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.screensweep.data.DownloadItem
+import com.screensweep.data.ImageFolder
 import com.screensweep.data.MediaRepository
 import com.screensweep.data.Settings
 import com.screensweep.data.SettingsRepository
@@ -155,6 +156,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { settingsRepo.setRetainDays(days) }
     }
 
+    fun setAutoCleanFolder(folder: ImageFolder, enabled: Boolean) {
+        viewModelScope.launch { settingsRepo.setAutoCleanFolder(folder, enabled) }
+    }
+
     fun unkeepPath(path: String) {
         viewModelScope.launch { settingsRepo.unkeepPath(path) }
     }
@@ -165,7 +170,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val s = settings.value ?: return@launch
             val cutoff = System.currentTimeMillis() - s.retainDays * 24L * 60 * 60 * 1000
             val (count, bytes) = withContext(Dispatchers.IO) {
-                mediaRepo.cleanOldScreenshots(cutoff, s.keptPaths, s.keptIds)
+                mediaRepo.cleanOldScreenshots(
+                    cutoff,
+                    s.keptPaths,
+                    s.keptIds,
+                    s.autoCleanFolders.mapNotNull { ImageFolder.fromKey(it) }.toSet()
+                )
             }
             refresh()
             onDone(count, bytes)

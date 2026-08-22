@@ -163,7 +163,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                "每天检查一次，删除超过保留天数的截图和 ChatGPT 图片，完成后发通知",
+                                "每天检查图片页选中的目录，删除超过保留天数的图片，完成后发通知",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
