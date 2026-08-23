@@ -31,6 +31,19 @@ app\build\outputs\apk\release\app-release.apk
 
 `keystore.properties` and keystore files are local-only signing material. Never commit them or expose their contents.
 
+## Release versioning
+
+Before every release, update the app version according to Semantic Versioning in `app/build.gradle.kts`:
+
+- `versionName` must use `MAJOR.MINOR.PATCH` format.
+- Increase `PATCH` for bug fixes and small UI or behavior corrections.
+- Increase `MINOR` for backward-compatible features.
+- Increase `MAJOR` for breaking changes or incompatible behavior changes.
+- Increase `versionCode` monotonically for every published release.
+- If a pre-release version is needed, use a SemVer suffix such as `-beta.1` in `versionName` and still increment `versionCode`.
+
+Verify the final `versionName` and `versionCode` before building and report them with the release APK.
+
 ## Completion workflow
 
 For a completed change:
