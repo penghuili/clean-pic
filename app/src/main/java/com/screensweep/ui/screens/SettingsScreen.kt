@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CleaningServices
@@ -57,6 +58,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.screensweep.MainViewModel
 import com.screensweep.R
+import com.screensweep.data.ImageSources
+import com.screensweep.data.labelForTreeUri
 import com.screensweep.ui.components.OnResumeEffect
 import com.screensweep.util.Permissions
 import com.screensweep.util.approximateSize
@@ -95,6 +98,9 @@ fun SettingsScreen(vm: MainViewModel) {
     val requestNotif = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { notifOk = Permissions.hasNotificationAccess(context) }
+    val addFolder = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri -> uri?.let(vm::addCustomFolder) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -144,6 +150,47 @@ fun SettingsScreen(vm: MainViewModel) {
                             }
                         }
                     )
+                }
+            }
+
+            // ---------- 自动清理目录 ----------
+            item {
+                SettingsCard(title = "自动清理目录") {
+                    Text(
+                        "选中的目录会按照上面的保留天数自动删除；第一 tab 也可以快速切换。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    ImageSources.builtIns.forEach { source ->
+                        AutoCleanFolderRow(
+                            label = source.label,
+                            selected = source.key in s.autoCleanFolders,
+                            onToggle = {
+                                vm.setAutoCleanFolder(
+                                    source.key,
+                                    source.key !in s.autoCleanFolders
+                                )
+                            }
+                        )
+                    }
+                    s.customFolderUris.forEach { uri ->
+                        AutoCleanFolderRow(
+                            label = labelForTreeUri(context, uri),
+                            selected = ImageSources.customKey(uri) in s.autoCleanFolders,
+                            onToggle = {
+                                val key = ImageSources.customKey(uri)
+                                vm.setAutoCleanFolder(key, key !in s.autoCleanFolders)
+                            },
+                            onRemove = { vm.removeCustomFolder(uri) }
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(onClick = { addFolder.launch(null) }) {
+                        Icon(Icons.Rounded.Add, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("添加文件夹")
+                    }
                 }
             }
 
@@ -253,7 +300,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         )
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text("截图清理 ScreenSweep", style = MaterialTheme.typography.titleMedium)
+                            Text("净图 · 本地图片整理", style = MaterialTheme.typography.titleMedium)
                             Text(
                                 "v1.0.0 · 纯本地运行，无网络权限 · 自用小工具",
                                 style = MaterialTheme.typography.bodySmall,
@@ -330,6 +377,28 @@ fun SettingsScreen(vm: MainViewModel) {
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun AutoCleanFolderRow(
+    label: String,
+    selected: Boolean,
+    onToggle: () -> Unit,
+    onRemove: (() -> Unit)? = null
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (onRemove != null) {
+            TextButton(onClick = onRemove) { Text("移除") }
+        }
+        Switch(checked = selected, onCheckedChange = { onToggle() })
     }
 }
 

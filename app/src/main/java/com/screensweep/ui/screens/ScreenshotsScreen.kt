@@ -69,8 +69,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.screensweep.MainViewModel
-import com.screensweep.data.ImageFolder
+import com.screensweep.data.ImageSources
 import com.screensweep.data.ShotItem
+import com.screensweep.data.labelForTreeUri
 import com.screensweep.ui.components.EmptyState
 import com.screensweep.ui.components.SelectionBottomBar
 import com.screensweep.util.dayLabel
@@ -84,8 +85,16 @@ fun ScreenshotsScreen(vm: MainViewModel) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val allShots by vm.shots.collectAsStateWithLifecycle()
 
+    val customFolderUris = settings?.customFolderUris ?: emptySet()
+    val sources = ImageSources.builtIns + customFolderUris.map { uri ->
+        com.screensweep.data.ImageSource(
+            key = ImageSources.customKey(uri),
+            label = labelForTreeUri(context, uri),
+            treeUri = uri
+        )
+    }
     val autoCleanFolders = settings?.autoCleanFolders
-        ?: ImageFolder.values().map { it.key }.toSet()
+        ?: ImageSources.builtIns.map { it.key }.toSet()
     val keptPaths = settings?.keptPaths ?: emptySet()
     val keptIds = settings?.keptIds ?: emptySet()
     val shots = remember(allShots, keptPaths, keptIds) {
@@ -161,16 +170,16 @@ fun ScreenshotsScreen(vm: MainViewModel) {
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    ImageFolder.values().forEach { folder ->
+                    sources.forEach { source ->
                         FilterChip(
-                            selected = folder.key in autoCleanFolders,
+                            selected = source.key in autoCleanFolders,
                             onClick = {
                                 vm.setAutoCleanFolder(
-                                    folder,
-                                    folder.key !in autoCleanFolders
+                                    source.key,
+                                    source.key !in autoCleanFolders
                                 )
                             },
-                            label = { Text(folder.label) }
+                            label = { Text(source.label) }
                         )
                     }
                 }

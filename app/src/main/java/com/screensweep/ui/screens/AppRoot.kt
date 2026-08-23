@@ -128,14 +128,14 @@ private fun PermissionScreen() {
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "欢迎使用截图清理",
+            "欢迎使用净图",
             style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
             color = androidx.compose.material3.MaterialTheme.colorScheme.onBackground
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "自动清理手机里过期的图片，手动整理下载目录。\n\n" +
-                "· 只处理「截图」和「ChatGPT」文件夹，绝不碰其他照片\n" +
+            "自动清理你选择的图片文件夹，手动整理下载目录。\n\n" +
+                "· 只处理你选择的文件夹，绝不碰其他照片\n" +
                 "· 已保留的内容永远不会被清理\n" +
                 "· 全部在本地完成，不联网、不上传",
             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,

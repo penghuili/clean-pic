@@ -1,10 +1,11 @@
 package com.screensweep
 
 import android.app.Application
+import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.screensweep.data.DownloadItem
-import com.screensweep.data.ImageFolder
 import com.screensweep.data.MediaRepository
 import com.screensweep.data.Settings
 import com.screensweep.data.SettingsRepository
@@ -58,7 +59,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val data = withContext(Dispatchers.IO) {
                 // Older app versions only marked kept screenshots in DataStore.
                 // Move those files once so the folder becomes the source of truth.
-                val existingShots = mediaRepo.queryScreenshots()
+                val existingShots = (
+                    mediaRepo.queryScreenshots() +
+                        mediaRepo.queryCustomFolders(savedSettings.customFolderUris)
+                    ).distinctBy { it.uri.toString() }
                 val legacyKept = existingShots.filter {
                     it.path in savedSettings.keptPaths || it.id.toString() in savedSettings.keptIds
                 }
@@ -66,7 +70,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 RefreshData(
                     migratedPaths = migrated.map { it.path }.toSet(),
                     migratedIds = migrated.map { it.id.toString() }.toSet(),
-                    shots = mediaRepo.queryScreenshots(),
+                    shots = (
+                        mediaRepo.queryScreenshots() +
+                            mediaRepo.queryCustomFolders(savedSettings.customFolderUris)
+                        ).distinctBy { it.uri.toString() },
                     keptShots = mediaRepo.queryKeptScreenshots(),
                     downloads = mediaRepo.queryDownloads()
                 )
@@ -156,8 +163,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { settingsRepo.setRetainDays(days) }
     }
 
-    fun setAutoCleanFolder(folder: ImageFolder, enabled: Boolean) {
-        viewModelScope.launch { settingsRepo.setAutoCleanFolder(folder, enabled) }
+    fun setAutoCleanFolder(sourceKey: String, enabled: Boolean) {
+        viewModelScope.launch { settingsRepo.setAutoCleanFolder(sourceKey, enabled) }
+    }
+
+    fun addCustomFolder(uri: Uri) {
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        try {
+            getApplication<Application>().contentResolver.takePersistableUriPermission(uri, flags)
+        } catch (_: SecurityException) {
+            try {
+                getApplication<Application>().contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: SecurityException) {
+                return
+            }
+        }
+        viewModelScope.launch {
+            settingsRepo.addCustomFolder(uri.toString())
+            refresh()
+        }
+    }
+
+    fun removeCustomFolder(uri: String) {
+        viewModelScope.launch {
+            settingsRepo.removeCustomFolder(uri)
+            refresh()
+        }
     }
 
     fun unkeepPath(path: String) {
@@ -174,7 +208,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     cutoff,
                     s.keptPaths,
                     s.keptIds,
-                    s.autoCleanFolders.mapNotNull { ImageFolder.fromKey(it) }.toSet()
+                    s.autoCleanFolders,
+                    s.customFolderUris
                 )
             }
             refresh()

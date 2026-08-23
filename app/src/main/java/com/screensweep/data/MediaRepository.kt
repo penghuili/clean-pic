@@ -8,16 +8,38 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.media.MediaScannerConnection
+import android.webkit.MimeTypeMap
+import androidx.documentfile.provider.DocumentFile
 import java.io.File
 
-enum class ImageFolder(val key: String, val label: String) {
-    SCREENSHOTS("screenshots", "截图"),
-    CHATGPT("chatgpt", "ChatGPT");
-
-    companion object {
-        fun fromKey(key: String): ImageFolder? = values().firstOrNull { it.key == key }
-    }
+data class ImageSource(
+    val key: String,
+    val label: String,
+    val treeUri: String? = null
+) {
+    val isCustom: Boolean
+        get() = treeUri != null
 }
+
+object ImageSources {
+    const val SCREENSHOTS = "screenshots"
+    const val CHATGPT = "chatgpt"
+    private const val CUSTOM_PREFIX = "tree:"
+
+    val builtIns = listOf(
+        ImageSource(SCREENSHOTS, "截图"),
+        ImageSource(CHATGPT, "ChatGPT")
+    )
+
+    fun customKey(treeUri: String): String = CUSTOM_PREFIX + treeUri
+
+    fun isCustomKey(key: String): Boolean = key.startsWith(CUSTOM_PREFIX)
+}
+
+fun labelForTreeUri(context: Context, treeUri: String): String =
+    DocumentFile.fromTreeUri(context, Uri.parse(treeUri))?.name
+        ?: Uri.parse(treeUri).lastPathSegment?.substringAfterLast(':')
+        ?: "自定义文件夹"
 
 data class ShotItem(
     val id: Long,
@@ -26,10 +48,13 @@ data class ShotItem(
     val bucket: String,
     val addedMs: Long,
     val size: Long,
-    val folder: ImageFolder = ImageFolder.SCREENSHOTS
+    val sourceKey: String = ImageSources.SCREENSHOTS,
+    val sourceLabel: String = "截图",
+    val customUri: Uri? = null
 ) {
     val uri: Uri
-        get() = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+        get() = customUri
+            ?: ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
 }
 
 data class DownloadItem(
@@ -127,7 +152,11 @@ class MediaRepository(private val context: Context) {
                         bucket = if (iBucket >= 0) c.getString(iBucket) ?: "" else "",
                         addedMs = c.getLong(iDate) * 1000L,
                         size = c.getLong(iSize),
-                        folder = classifyFolder(
+                        sourceKey = classifySourceKey(
+                            if (iData >= 0) c.getString(iData) ?: "" else "",
+                            if (iBucket >= 0) c.getString(iBucket) ?: "" else ""
+                        ),
+                        sourceLabel = classifySourceLabel(
                             if (iData >= 0) c.getString(iData) ?: "" else "",
                             if (iBucket >= 0) c.getString(iBucket) ?: "" else ""
                         )
@@ -139,16 +168,65 @@ class MediaRepository(private val context: Context) {
         return result
     }
 
-    private fun classifyFolder(path: String, bucket: String): ImageFolder =
+    private fun classifySourceKey(path: String, bucket: String): String =
         if (path.contains("chatgpt", true) || bucket.contains("chatgpt", true)) {
-            ImageFolder.CHATGPT
+            ImageSources.CHATGPT
         } else {
-            ImageFolder.SCREENSHOTS
+            ImageSources.SCREENSHOTS
         }
+
+    private fun classifySourceLabel(path: String, bucket: String): String =
+        if (path.contains("chatgpt", true) || bucket.contains("chatgpt", true)) {
+            "ChatGPT"
+        } else {
+            "截图"
+        }
+
+    fun queryCustomFolders(treeUris: Set<String>): List<ShotItem> =
+        treeUris.flatMap { queryCustomFolder(it) }
+            .distinctBy { it.uri.toString() }
+
+    private fun queryCustomFolder(treeUri: String): List<ShotItem> {
+        val root = DocumentFile.fromTreeUri(context, Uri.parse(treeUri)) ?: return emptyList()
+        val label = root.name ?: labelForTreeUri(context, treeUri)
+        val sourceKey = ImageSources.customKey(treeUri)
+        return collectCustomImages(root, sourceKey, label)
+    }
+
+    private fun collectCustomImages(
+        directory: DocumentFile,
+        sourceKey: String,
+        sourceLabel: String
+    ): List<ShotItem> {
+        return directory.listFiles().flatMap { file ->
+            when {
+                file.isDirectory -> collectCustomImages(file, sourceKey, sourceLabel)
+                file.isFile && isImageName(file.name.orEmpty()) -> listOf(
+                    ShotItem(
+                        id = file.uri.toString().hashCode().toLong(),
+                        name = file.name ?: "图片",
+                        path = file.uri.toString(),
+                        bucket = sourceLabel,
+                        addedMs = file.lastModified(),
+                        size = file.length(),
+                        sourceKey = sourceKey,
+                        sourceLabel = sourceLabel,
+                        customUri = file.uri
+                    )
+                )
+                else -> emptyList()
+            }
+        }
+    }
+
+    private fun isImageName(name: String): Boolean =
+        name.substringAfterLast('.', "").lowercase() in
+            setOf("jpg", "jpeg", "png", "gif", "webp", "heic", "bmp", "avif")
 
     /** 最后一道保险：只有路径或相册名确实是受支持的图片目录才允许操作 */
     private val ShotItem.looksLikeManagedImage: Boolean
-        get() = path.contains("screenshot", true)
+        get() = ImageSources.isCustomKey(sourceKey)
+            || path.contains("screenshot", true)
             || bucket.contains("screenshot", true)
             || bucket == "截屏"
             || bucket == "屏幕截图"
@@ -158,6 +236,9 @@ class MediaRepository(private val context: Context) {
     /** Move a managed image out of its source folder into the kept folder. */
     fun moveShotToKept(item: ShotItem): Boolean {
         if (!item.looksLikeManagedImage) return false
+        if (ImageSources.isCustomKey(item.sourceKey)) {
+            return copyCustomFileToKept(item)
+        }
         if (Build.VERSION.SDK_INT >= 29) {
             return try {
                 val values = ContentValues().apply {
@@ -202,15 +283,7 @@ class MediaRepository(private val context: Context) {
         if (!source.isFile) return false
         if (!targetDirectory.exists() && !targetDirectory.mkdirs()) return false
 
-        val extension = source.extension
-        val baseName = source.nameWithoutExtension
-        var target = File(targetDirectory, source.name)
-        var suffix = 1
-        while (target.exists()) {
-            val name = if (extension.isEmpty()) "$baseName-$suffix" else "$baseName-$suffix.$extension"
-            target = File(targetDirectory, name)
-            suffix++
-        }
+        val target = uniqueTarget(targetDirectory, source.name)
         if (!source.renameTo(target)) return false
         MediaScannerConnection.scanFile(
             context,
@@ -221,8 +294,121 @@ class MediaRepository(private val context: Context) {
         return true
     }
 
+    private fun uniqueTarget(directory: File, sourceName: String): File {
+        var target = File(directory, sourceName)
+        val extension = sourceName.substringAfterLast('.', "")
+        val baseName = sourceName.substringBeforeLast('.', sourceName)
+        var suffix = 1
+        while (target.exists()) {
+            val name = if (extension.isEmpty()) "$baseName-$suffix" else "$baseName-$suffix.$extension"
+            target = File(directory, name)
+            suffix++
+        }
+        return target
+    }
+
+    private fun copyCustomFileToKept(item: ShotItem): Boolean {
+        val targetName = item.name
+        return if (Build.VERSION.SDK_INT >= 29) {
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, targetName)
+                put(MediaStore.Images.Media.MIME_TYPE, mimeTypeFor(targetName))
+                put(MediaStore.Images.Media.RELATIVE_PATH, KEPT_RELATIVE_PATH)
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val targetUri = try {
+                context.contentResolver.insert(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    values
+                )
+            } catch (_: Exception) {
+                null
+            } ?: return false
+
+            val copied = try {
+                context.contentResolver.openInputStream(item.uri).use { input ->
+                    context.contentResolver.openOutputStream(targetUri).use { output ->
+                        if (input == null || output == null) false
+                        else {
+                            input.copyTo(output)
+                            true
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                false
+            }
+            val deleted = if (copied) {
+                try {
+                    DocumentFile.fromSingleUri(context, item.uri)?.delete() == true
+                } catch (_: Exception) {
+                    false
+                }
+            } else {
+                false
+            }
+            if (copied && deleted) {
+                context.contentResolver.update(
+                    targetUri,
+                    ContentValues().apply {
+                        put(MediaStore.Images.Media.IS_PENDING, 0)
+                    },
+                    null,
+                    null
+                )
+                true
+            } else {
+                context.contentResolver.delete(targetUri, null, null)
+                false
+            }
+        } else {
+            val targetDirectory = keptDirectory()
+            if (!targetDirectory.exists() && !targetDirectory.mkdirs()) return false
+            val target = uniqueTarget(targetDirectory, targetName)
+            val copied = try {
+                context.contentResolver.openInputStream(item.uri).use { input ->
+                    target.outputStream().use { output ->
+                        if (input == null) false else {
+                            input.copyTo(output)
+                            true
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                false
+            }
+            if (!copied) {
+                target.delete()
+                return false
+            }
+            val deleted = try {
+                DocumentFile.fromSingleUri(context, item.uri)?.delete() == true
+            } catch (_: Exception) {
+                false
+            }
+            if (!deleted) {
+                target.delete()
+                return false
+            }
+            MediaScannerConnection.scanFile(context, arrayOf(target.absolutePath), null, null)
+            true
+        }
+    }
+
+    private fun mimeTypeFor(name: String): String =
+        MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+            name.substringAfterLast('.', "").lowercase()
+        ) ?: "image/*"
+
     fun deleteShot(item: ShotItem): Boolean {
         if (!item.looksLikeManagedImage) return false
+        if (ImageSources.isCustomKey(item.sourceKey)) {
+            return try {
+                DocumentFile.fromSingleUri(context, item.uri)?.delete() == true
+            } catch (_: Exception) {
+                false
+            }
+        }
         val viaProvider = try {
             context.contentResolver.delete(item.uri, null, null) > 0
         } catch (_: Exception) {
@@ -242,12 +428,15 @@ class MediaRepository(private val context: Context) {
         olderThanMs: Long,
         keptPaths: Set<String>,
         keptIds: Set<String>,
-        enabledFolders: Set<ImageFolder>
+        enabledSources: Set<String>,
+        customFolderUris: Set<String>
     ): Pair<Int, Long> {
         var count = 0
         var bytes = 0L
-        for (s in queryScreenshots()) {
-            if (s.folder !in enabledFolders) continue
+        val allImages = (queryScreenshots() + queryCustomFolders(customFolderUris))
+            .distinctBy { it.uri.toString() }
+        for (s in allImages) {
+            if (s.sourceKey !in enabledSources) continue
             if (s.addedMs < olderThanMs && s.path !in keptPaths && s.id.toString() !in keptIds) {
                 if (deleteShot(s)) {
                     count++

@@ -3,7 +3,6 @@ package com.screensweep.work
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.screensweep.data.ImageFolder
 import com.screensweep.data.MediaRepository
 import com.screensweep.data.SettingsRepository
 import com.screensweep.notify.Notifier
@@ -30,7 +29,8 @@ class CleanWorker(context: Context, params: WorkerParameters) :
                 cutoff,
                 settings.keptPaths,
                 settings.keptIds,
-                settings.autoCleanFolders.mapNotNull { ImageFolder.fromKey(it) }.toSet()
+                settings.autoCleanFolders,
+                settings.customFolderUris
             )
 
         if (count > 0) {
