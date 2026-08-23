@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -18,7 +19,9 @@ data class Settings(
     val keptPaths: Set<String> = emptySet(),
     val keptIds: Set<String> = emptySet(),
     val autoCleanFolders: Set<String> = defaultAutoCleanFolders,
-    val customFolderUris: Set<String> = emptySet()
+    val customFolderUris: Set<String> = emptySet(),
+    val driveEnabled: Boolean = false,
+    val driveAccount: String? = null
 )
 
 class SettingsRepository(private val context: Context) {
@@ -30,6 +33,8 @@ class SettingsRepository(private val context: Context) {
         val KEPT_IDS = stringSetPreferencesKey("kept_ids")
         val AUTO_FOLDERS = stringSetPreferencesKey("auto_clean_folders")
         val CUSTOM_FOLDERS = stringSetPreferencesKey("custom_folders")
+        val DRIVE_ENABLED = booleanPreferencesKey("drive_sync_enabled")
+        val DRIVE_ACCOUNT = stringPreferencesKey("drive_account")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { p ->
@@ -39,7 +44,9 @@ class SettingsRepository(private val context: Context) {
             keptPaths = p[Keys.KEPT_PATHS] ?: emptySet(),
             keptIds = p[Keys.KEPT_IDS] ?: emptySet(),
             autoCleanFolders = p[Keys.AUTO_FOLDERS] ?: defaultAutoCleanFolders,
-            customFolderUris = p[Keys.CUSTOM_FOLDERS] ?: emptySet()
+            customFolderUris = p[Keys.CUSTOM_FOLDERS] ?: emptySet(),
+            driveEnabled = p[Keys.DRIVE_ENABLED] ?: false,
+            driveAccount = p[Keys.DRIVE_ACCOUNT]
         )
     }
 
@@ -49,6 +56,21 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setRetainDays(days: Int) {
         context.dataStore.edit { it[Keys.DAYS] = days.coerceIn(1, 90) }
+    }
+
+    suspend fun setDriveAccount(accountName: String?) {
+        context.dataStore.edit { preferences ->
+            if (accountName.isNullOrBlank()) {
+                preferences.remove(Keys.DRIVE_ACCOUNT)
+                preferences[Keys.DRIVE_ENABLED] = false
+            } else {
+                preferences[Keys.DRIVE_ACCOUNT] = accountName
+            }
+        }
+    }
+
+    suspend fun setDriveEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.DRIVE_ENABLED] = enabled }
     }
 
     suspend fun setAutoCleanFolder(sourceKey: String, enabled: Boolean) {

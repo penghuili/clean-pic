@@ -10,6 +10,7 @@ import android.provider.MediaStore
 import android.media.MediaScannerConnection
 import android.webkit.MimeTypeMap
 import androidx.documentfile.provider.DocumentFile
+import com.screensweep.drive.DriveFileIdentity
 import java.io.File
 
 data class ImageSource(
@@ -65,6 +66,8 @@ data class DownloadItem(
 )
 
 class MediaRepository(private val context: Context) {
+
+    private val tombstones = TombstoneStore(context)
 
     companion object {
         private const val KEPT_RELATIVE_PATH = "Pictures/CleanPic/Kept/"
@@ -400,31 +403,41 @@ class MediaRepository(private val context: Context) {
             name.substringAfterLast('.', "").lowercase()
         ) ?: "image/*"
 
-    fun deleteShot(item: ShotItem): Boolean {
+    /**
+     * 删除受管图片。删除成功后写入墓碑，
+     * 由 Drive 同步在云端确认删除后才移除，保证云端副本一并消失。
+     */
+    suspend fun deleteShot(item: ShotItem): Boolean {
         if (!item.looksLikeManagedImage) return false
-        if (ImageSources.isCustomKey(item.sourceKey)) {
-            return try {
+        val cloudKey = DriveFileIdentity.keyFor(item)
+        val deleted = if (ImageSources.isCustomKey(item.sourceKey)) {
+            try {
                 DocumentFile.fromSingleUri(context, item.uri)?.delete() == true
             } catch (_: Exception) {
                 false
             }
+        } else {
+            val viaProvider = try {
+                context.contentResolver.delete(item.uri, null, null) > 0
+            } catch (_: Exception) {
+                false
+            }
+            if (viaProvider) true else {
+                if (item.path.isEmpty()) false else try {
+                    File(item.path).delete()
+                } catch (_: Exception) {
+                    false
+                }
+            }
         }
-        val viaProvider = try {
-            context.contentResolver.delete(item.uri, null, null) > 0
-        } catch (_: Exception) {
-            false
+        if (deleted) {
+            tombstones.record(cloudKey, item.name, item.size)
         }
-        if (viaProvider) return true
-        if (item.path.isEmpty()) return false
-        return try {
-            File(item.path).delete()
-        } catch (_: Exception) {
-            false
-        }
+        return deleted
     }
 
     /** 删除超过 [olderThanMs] 的受支持图片，跳过已保留项；返回 (删除数量, 释放字节数) */
-    fun cleanOldScreenshots(
+    suspend fun cleanOldScreenshots(
         olderThanMs: Long,
         keptPaths: Set<String>,
         keptIds: Set<String>,

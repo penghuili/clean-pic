@@ -1,6 +1,7 @@
 package com.screensweep.ui.screens
 
 import android.Manifest
+import android.app.Activity
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material3.AlertDialog
@@ -60,6 +62,8 @@ import com.screensweep.MainViewModel
 import com.screensweep.R
 import com.screensweep.data.ImageSources
 import com.screensweep.data.labelForTreeUri
+import com.screensweep.drive.DriveSyncManager
+import com.screensweep.drive.DriveSyncResult
 import com.screensweep.ui.components.OnResumeEffect
 import com.screensweep.util.Permissions
 import com.screensweep.util.approximateSize
@@ -71,6 +75,7 @@ fun SettingsScreen(vm: MainViewModel) {
     val context = LocalContext.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val keptShots by vm.keptShots.collectAsStateWithLifecycle()
+    val pendingCloudDeletions by vm.pendingCloudDeletions.collectAsStateWithLifecycle()
     val s = settings
 
     var storageOk by remember { mutableStateOf(Permissions.hasStorageAccess(context)) }
@@ -101,6 +106,42 @@ fun SettingsScreen(vm: MainViewModel) {
     val addFolder = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri -> uri?.let(vm::addCustomFolder) }
+    val pickDriveAccount = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val accountName = DriveSyncManager.accountNameFromResult(result.data)
+        if (result.resultCode == Activity.RESULT_OK && accountName != null) {
+            vm.signInDrive(accountName)
+        }
+    }
+    val requestDriveConsent = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) {
+            message = "Google Drive 授权未完成"
+        } else {
+            vm.syncDriveNow { syncResult ->
+                message = when (syncResult) {
+                    is DriveSyncResult.Ok ->
+                        "同步完成：上传 ${syncResult.uploaded} 张，云端删除 ${syncResult.removed} 张"
+                    is DriveSyncResult.Error -> syncResult.message
+                    is DriveSyncResult.NeedsConsent -> "Google Drive 授权尚未生效，请重试"
+                }
+            }
+        }
+    }
+    fun driveSyncNow() {
+        vm.syncDriveNow { result ->
+            when (result) {
+                is DriveSyncResult.NeedsConsent ->
+                    requestDriveConsent.launch(result.intent)
+                is DriveSyncResult.Ok ->
+                    message = "同步完成：上传 ${result.uploaded} 张，云端删除 ${result.removed} 张"
+                is DriveSyncResult.Error ->
+                    message = result.message
+            }
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -258,6 +299,71 @@ fun SettingsScreen(vm: MainViewModel) {
                 }
             }
 
+            // ---------- Google 云端同步 ----------
+            item {
+                val account = s.driveAccount
+                SettingsCard(title = "Google 云端同步") {
+                    if (account == null) {
+                        Text(
+                            "登录后会把受管图片备份到 Drive 的 CleanPic 文件夹；删除图片时云端副本会一并删除。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                pickDriveAccount.launch(DriveSyncManager.newAccountPickerIntent())
+                            }
+                        ) {
+                            Icon(Icons.Rounded.Cloud, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("登录 Google 账号")
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Rounded.Cloud,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(account, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    if (s.driveEnabled) "同步已开启" else "同步未开启",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = s.driveEnabled,
+                                onCheckedChange = { vm.setDriveSync(it) }
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            if (pendingCloudDeletions > 0)
+                                "$pendingCloudDeletions 个删除操作待同步到云端"
+                            else "所有删除都已同步到云端",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { driveSyncNow() },
+                                enabled = s.driveEnabled
+                            ) {
+                                Text("立即同步")
+                            }
+                            TextButton(onClick = { vm.signOutDrive() }) {
+                                Text("退出登录")
+                            }
+                        }
+                    }
+                }
+            }
+
             // ---------- 保留项 ----------
             item {
                 SettingsCard(title = "保留项") {
@@ -302,7 +408,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         Column {
                             Text("净图 · 本地图片整理", style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "v1.0.0 · 纯本地运行，无网络权限 · 自用小工具",
+                                "v1.1.0 · 本地图片整理，可选 Google 云端同步",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

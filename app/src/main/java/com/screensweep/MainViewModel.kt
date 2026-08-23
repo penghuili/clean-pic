@@ -10,6 +10,10 @@ import com.screensweep.data.MediaRepository
 import com.screensweep.data.Settings
 import com.screensweep.data.SettingsRepository
 import com.screensweep.data.ShotItem
+import com.screensweep.data.TombstoneStore
+import com.screensweep.drive.DriveSyncManager
+import com.screensweep.drive.DriveSyncResult
+import com.screensweep.work.DriveSyncScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -30,9 +34,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val settingsRepo = SettingsRepository(app)
     private val mediaRepo = MediaRepository(app)
+    private val tombstoneStore = TombstoneStore(app)
 
     val settings: StateFlow<Settings?> = settingsRepo.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** 等待传播到云端的删除条数 */
+    val pendingCloudDeletions: StateFlow<Int> = tombstoneStore.countFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     private val _shots = MutableStateFlow<List<ShotItem>>(emptyList())
     val shots: StateFlow<List<ShotItem>> = _shots.asStateFlow()
@@ -87,6 +96,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             refresh()
             onDone(count, bytes)
+            if (count > 0) requestDriveSyncIfEnabled()
         }
     }
 
@@ -198,6 +208,60 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             refresh()
             onDone(count, bytes)
+            if (count > 0) requestDriveSyncIfEnabled()
+        }
+    }
+
+    // ---------- Google Drive 同步 ----------
+
+    fun signInDrive(accountName: String?) {
+        if (accountName.isNullOrEmpty()) return
+        viewModelScope.launch {
+            settingsRepo.setDriveAccount(accountName)
+        }
+    }
+
+    fun signOutDrive() {
+        viewModelScope.launch {
+            settingsRepo.setDriveAccount(null)
+            DriveSyncScheduler.cancel(getApplication())
+        }
+    }
+
+    fun setDriveSync(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepo.setDriveEnabled(enabled)
+            if (enabled) {
+                DriveSyncScheduler.schedulePeriodic(getApplication())
+                requestDriveSyncIfEnabled()
+            } else {
+                DriveSyncScheduler.cancel(getApplication())
+            }
+        }
+    }
+
+    /** 手动触发一次同步；需要授权时通过回调把 Intent 交给 UI 拉起授权页 */
+    fun syncDriveNow(onResult: (DriveSyncResult) -> Unit) {
+        viewModelScope.launch {
+            val s = settingsRepo.settings.first()
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    DriveSyncManager(getApplication()).sync(s)
+                } catch (e: Exception) {
+                    DriveSyncResult.Error("同步失败：${e.message ?: "未知错误"}")
+                }
+            }
+            onResult(result)
+        }
+    }
+
+    private fun requestDriveSyncIfEnabled() {
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            val s = settingsRepo.settings.first()
+            if (s.driveEnabled && !s.driveAccount.isNullOrEmpty()) {
+                DriveSyncScheduler.requestSyncAfterDeletion(app)
+            }
         }
     }
 }
