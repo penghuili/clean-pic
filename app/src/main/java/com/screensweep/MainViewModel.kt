@@ -57,6 +57,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _scanning.value = true
             val savedSettings = settingsRepo.settings.first()
             val data = withContext(Dispatchers.IO) {
+                mediaRepo.migrateLegacyKeptFolder()
                 // Older app versions only marked kept screenshots in DataStore.
                 // Move those files once so the folder becomes the source of truth.
                 val existingShots = (

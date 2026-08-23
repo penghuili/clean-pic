@@ -67,7 +67,8 @@ data class DownloadItem(
 class MediaRepository(private val context: Context) {
 
     companion object {
-        private const val KEPT_RELATIVE_PATH = "Pictures/ScreenSweep/Kept/"
+        private const val KEPT_RELATIVE_PATH = "Pictures/净图/保留/"
+        private const val LEGACY_KEPT_RELATIVE_PATH = "Pictures/ScreenSweep/Kept/"
         private const val SCREENSHOTS_RELATIVE_PATH = "Pictures/Screenshots/"
     }
 
@@ -114,6 +115,39 @@ class MediaRepository(private val context: Context) {
             args = arrayOf("${keptDirectory().absolutePath}${File.separator}%")
         }
         return queryImages(selection, args)
+    }
+
+    /** Migrate the old English-named shared folder after the app was renamed. */
+    fun migrateLegacyKeptFolder() {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val selection = MediaStore.Images.Media.RELATIVE_PATH + " LIKE ?"
+            val oldItems = queryImages(
+                selection,
+                arrayOf("$LEGACY_KEPT_RELATIVE_PATH%")
+            )
+            oldItems.forEach { item ->
+                try {
+                    context.contentResolver.update(
+                        item.uri,
+                        ContentValues().apply {
+                            put(MediaStore.Images.Media.RELATIVE_PATH, KEPT_RELATIVE_PATH)
+                        },
+                        null,
+                        null
+                    )
+                } catch (_: Exception) {
+                    // Leave the old file in place and retry on the next refresh.
+                }
+            }
+        } else {
+            val oldDirectory = legacyKeptDirectory()
+            val targetDirectory = keptDirectory()
+            if (!oldDirectory.isDirectory) return
+            if (!targetDirectory.exists() && !targetDirectory.mkdirs()) return
+            oldDirectory.listFiles()
+                ?.filter { it.isFile }
+                ?.forEach { moveLegacyFile(it.absolutePath, targetDirectory) }
+        }
     }
 
     private fun queryImages(selection: String, args: Array<String>): List<ShotItem> {
@@ -268,6 +302,11 @@ class MediaRepository(private val context: Context) {
     }
 
     private fun keptDirectory(): File = File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+        "净图/保留"
+    )
+
+    private fun legacyKeptDirectory(): File = File(
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
         "ScreenSweep/Kept"
     )
