@@ -6,7 +6,6 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.screensweep.notify.Notifier
 import com.screensweep.work.CleanWorker
-import com.screensweep.work.DriveSyncScheduler
 import java.util.concurrent.TimeUnit
 
 class App : Application() {
@@ -19,8 +18,9 @@ class App : Application() {
             ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<CleanWorker>(1, TimeUnit.DAYS).build()
         )
-        // 未开启 Drive 同步时 Worker 会直接跳过
-        DriveSyncScheduler.schedulePeriodic(this)
+        // 1.1.0 曾注册过云端同步任务；升级后立即取消，避免已移除的 Worker 被再次唤起。
+        WorkManager.getInstance(this).cancelUniqueWork("drive_sync_once")
+        WorkManager.getInstance(this).cancelUniqueWork("drive_sync_periodic")
     }
 
     companion object {

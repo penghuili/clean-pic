@@ -35,9 +35,6 @@ class CleanWorker(context: Context, params: WorkerParameters) :
 
         if (count > 0) {
             Notifier.notifyCleanResult(app, count, bytes)
-            if (settings.driveEnabled && !settings.driveAccount.isNullOrEmpty()) {
-                DriveSyncScheduler.requestSyncAfterDeletion(app)
-            }
         }
         return Result.success()
     }
