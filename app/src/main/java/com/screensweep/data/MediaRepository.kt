@@ -68,10 +68,6 @@ class MediaRepository(private val context: Context) {
 
     companion object {
         private const val KEPT_RELATIVE_PATH = "Pictures/CleanPic/Kept/"
-        private val LEGACY_KEPT_RELATIVE_PATHS = listOf(
-            "Pictures/净图/保留/",
-            "Pictures/ScreenSweep/Kept/"
-        )
         private const val SCREENSHOTS_RELATIVE_PATH = "Pictures/Screenshots/"
     }
 
@@ -118,40 +114,6 @@ class MediaRepository(private val context: Context) {
             args = arrayOf("${keptDirectory().absolutePath}${File.separator}%")
         }
         return queryImages(selection, args)
-    }
-
-    /** Migrate the old English-named shared folder after the app was renamed. */
-    fun migrateLegacyKeptFolder() {
-        if (Build.VERSION.SDK_INT >= 29) {
-            val selection = MediaStore.Images.Media.RELATIVE_PATH + " LIKE ?"
-            LEGACY_KEPT_RELATIVE_PATHS.forEach { legacyPath ->
-                val oldItems = queryImages(selection, arrayOf("$legacyPath%"))
-                oldItems.forEach { item ->
-                    try {
-                        context.contentResolver.update(
-                            item.uri,
-                            ContentValues().apply {
-                                put(MediaStore.Images.Media.RELATIVE_PATH, KEPT_RELATIVE_PATH)
-                            },
-                            null,
-                            null
-                        )
-                    } catch (_: Exception) {
-                        // Leave the old file in place and retry on the next refresh.
-                    }
-                }
-            }
-        } else {
-            val targetDirectory = keptDirectory()
-            if (!targetDirectory.exists() && !targetDirectory.mkdirs()) return
-            listOf(legacyChineseKeptDirectory(), legacyEnglishKeptDirectory())
-                .filter { it.isDirectory }
-                .forEach { oldDirectory ->
-                    oldDirectory.listFiles()
-                        ?.filter { it.isFile }
-                        ?.forEach { moveLegacyFile(it.absolutePath, targetDirectory) }
-                }
-        }
     }
 
     private fun queryImages(selection: String, args: Array<String>): List<ShotItem> {
@@ -308,16 +270,6 @@ class MediaRepository(private val context: Context) {
     private fun keptDirectory(): File = File(
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
         "CleanPic/Kept"
-    )
-
-    private fun legacyChineseKeptDirectory(): File = File(
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-        "净图/保留"
-    )
-
-    private fun legacyEnglishKeptDirectory(): File = File(
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-        "ScreenSweep/Kept"
     )
 
     private fun screenshotsDirectory(): File = File(

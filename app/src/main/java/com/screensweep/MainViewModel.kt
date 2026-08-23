@@ -21,8 +21,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private data class RefreshData(
-    val migratedPaths: Set<String>,
-    val migratedIds: Set<String>,
     val shots: List<ShotItem>,
     val keptShots: List<ShotItem>,
     val downloads: List<DownloadItem>
@@ -57,30 +55,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _scanning.value = true
             val savedSettings = settingsRepo.settings.first()
             val data = withContext(Dispatchers.IO) {
-                mediaRepo.migrateLegacyKeptFolder()
-                // Older app versions only marked kept screenshots in DataStore.
-                // Move those files once so the folder becomes the source of truth.
                 val existingShots = (
                     mediaRepo.queryScreenshots() +
                         mediaRepo.queryCustomFolders(savedSettings.customFolderUris)
                     ).distinctBy { it.uri.toString() }
-                val legacyKept = existingShots.filter {
-                    it.path in savedSettings.keptPaths || it.id.toString() in savedSettings.keptIds
-                }
-                val migrated = legacyKept.filter { mediaRepo.moveShotToKept(it) }
                 RefreshData(
-                    migratedPaths = migrated.map { it.path }.toSet(),
-                    migratedIds = migrated.map { it.id.toString() }.toSet(),
-                    shots = (
-                        mediaRepo.queryScreenshots() +
-                            mediaRepo.queryCustomFolders(savedSettings.customFolderUris)
-                        ).distinctBy { it.uri.toString() },
+                    shots = existingShots,
                     keptShots = mediaRepo.queryKeptScreenshots(),
                     downloads = mediaRepo.queryDownloads()
                 )
-            }
-            if (data.migratedPaths.isNotEmpty() || data.migratedIds.isNotEmpty()) {
-                settingsRepo.removeKeptItems(data.migratedPaths, data.migratedIds)
             }
             _shots.value = data.shots
             _keptShots.value = data.keptShots
