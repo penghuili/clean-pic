@@ -21,6 +21,11 @@ data class Settings(
     val customFolderUris: Set<String> = emptySet()
 )
 
+data class ImageFolderCheck(
+    val folders: List<ImageFolder> = emptyList(),
+    val firstCheck: Boolean = false
+)
+
 class SettingsRepository(private val context: Context) {
 
     private object Keys {
@@ -30,6 +35,8 @@ class SettingsRepository(private val context: Context) {
         val KEPT_IDS = stringSetPreferencesKey("kept_ids")
         val AUTO_FOLDERS = stringSetPreferencesKey("auto_clean_folders")
         val CUSTOM_FOLDERS = stringSetPreferencesKey("custom_folders")
+        val KNOWN_IMAGE_FOLDERS = stringSetPreferencesKey("known_image_folders")
+        val IMAGE_FOLDER_BASELINE = booleanPreferencesKey("image_folder_baseline")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { p ->
@@ -85,5 +92,27 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { p ->
             p[Keys.KEPT_PATHS] = (p[Keys.KEPT_PATHS] ?: emptySet()) - path
         }
+    }
+
+    /**
+     * 记录本次看到的图片文件夹，并返回本次以前没有见过的文件夹。
+     * 这是提醒机制的本地基线，不代表 Google Photos 的备份状态。
+     */
+    suspend fun rememberImageFolders(current: List<ImageFolder>): ImageFolderCheck {
+        var result = ImageFolderCheck()
+        context.dataStore.edit { p ->
+            val baselineCreated = p[Keys.IMAGE_FOLDER_BASELINE] ?: false
+            val known = p[Keys.KNOWN_IMAGE_FOLDERS] ?: emptySet()
+            val currentKeys = current.map { it.key }.toSet()
+            result = ImageFolderCheck(
+                folders = current
+                    .filter { !baselineCreated || it.key !in known }
+                    .sortedBy { it.key.lowercase() },
+                firstCheck = !baselineCreated
+            )
+            p[Keys.KNOWN_IMAGE_FOLDERS] = known + currentKeys
+            p[Keys.IMAGE_FOLDER_BASELINE] = true
+        }
+        return result
     }
 }

@@ -70,6 +70,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.screensweep.MainViewModel
 import com.screensweep.data.ImageSources
+import com.screensweep.data.ImageFolderCheck
 import com.screensweep.data.ShotItem
 import com.screensweep.data.labelForTreeUri
 import com.screensweep.ui.components.EmptyState
@@ -108,6 +109,7 @@ fun ScreenshotsScreen(vm: MainViewModel) {
     val selected = remember { mutableStateMapOf<Long, ShotItem>() }
     var preview by remember { mutableStateOf<ShotItem?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var folderCheck by remember { mutableStateOf<ImageFolderCheck?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
 
@@ -295,8 +297,9 @@ fun ScreenshotsScreen(vm: MainViewModel) {
                 preview = null
             },
             onDelete = {
-                vm.deleteShots(listOf(shot)) { c, b ->
+                vm.deleteShots(listOf(shot)) { c, b, check ->
                     message = "已删除 $c 张，释放 ${formatSize(context, b)}"
+                    if (check.folders.isNotEmpty()) folderCheck = check
                 }
                 preview = null
             }
@@ -313,8 +316,9 @@ fun ScreenshotsScreen(vm: MainViewModel) {
                     onClick = {
                         confirmDelete = false
                         val items = selected.values.toList()
-                        vm.deleteShots(items) { c, b ->
+                        vm.deleteShots(items) { c, b, check ->
                             message = "已删除 $c 张，释放 ${formatSize(context, b)}"
+                            if (check.folders.isNotEmpty()) folderCheck = check
                         }
                         selected.clear()
                     },
@@ -326,6 +330,53 @@ fun ScreenshotsScreen(vm: MainViewModel) {
             dismissButton = {
                 TextButton(onClick = { confirmDelete = false }) { Text("取消") }
             }
+        )
+    }
+
+    folderCheck?.let { check ->
+        val photosInstalled = remember {
+            context.packageManager.getLaunchIntentForPackage("com.google.android.apps.photos") != null
+        }
+        AlertDialog(
+            onDismissRequest = { folderCheck = null },
+            title = {
+                Text(if (check.firstCheck) "请检查 Google Photos 的备份文件夹" else "发现新的图片文件夹")
+            },
+            text = {
+                Column {
+                    Text(
+                        if (check.firstCheck) {
+                            "这是净图第一次检查到的图片文件夹。请在 Google Photos 的备份设置中确认需要备份哪些文件夹。"
+                        } else {
+                            "删除后发现了以前没见过的图片文件夹。Google Photos 可能不会自动把它加入备份，请检查。"
+                        }
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    check.folders.take(12).forEach { folder ->
+                        Text("• ${folder.label}（${folder.imageCount} 张）")
+                    }
+                    if (check.folders.size > 12) {
+                        Spacer(Modifier.height(4.dp))
+                        Text("还有 ${check.folders.size - 12} 个文件夹未展开")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("建议在 Google Photos 中开启“自动包含新文件夹”；净图提醒只是补充检查。")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { folderCheck = null }) { Text("知道了") }
+            },
+            dismissButton = if (photosInstalled) {
+                {
+                    TextButton(
+                        onClick = {
+                            context.packageManager
+                                .getLaunchIntentForPackage("com.google.android.apps.photos")
+                                ?.let(context::startActivity)
+                        }
+                    ) { Text("打开 Google Photos") }
+                }
+            } else null
         )
     }
 }

@@ -24,17 +24,21 @@ class CleanWorker(context: Context, params: WorkerParameters) :
         if (!settings.autoCleanEnabled) return Result.success()
 
         val cutoff = System.currentTimeMillis() - settings.retainDays * 24L * 60 * 60 * 1000
-        val (count, bytes) = MediaRepository(app)
-            .cleanOldScreenshots(
-                cutoff,
-                settings.keptPaths,
-                settings.keptIds,
-                settings.autoCleanFolders,
-                settings.customFolderUris
-            )
+        val mediaRepo = MediaRepository(app)
+        val folderSnapshot = mediaRepo.queryImageFolders()
+        val (count, bytes) = mediaRepo.cleanOldScreenshots(
+            cutoff,
+            settings.keptPaths,
+            settings.keptIds,
+            settings.autoCleanFolders,
+            settings.customFolderUris
+        )
 
         if (count > 0) {
-            Notifier.notifyCleanResult(app, count, bytes)
+            val folderCheck = SettingsRepository(app).rememberImageFolders(
+                folderSnapshot
+            )
+            Notifier.notifyCleanResult(app, count, bytes, folderCheck.folders)
         }
         return Result.success()
     }

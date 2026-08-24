@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.screensweep.MainActivity
 import com.screensweep.R
+import com.screensweep.data.ImageFolder
 
 object Notifier {
 
@@ -29,7 +30,12 @@ object Notifier {
         )
     }
 
-    fun notifyCleanResult(context: Context, deletedCount: Int, freedBytes: Long) {
+    fun notifyCleanResult(
+        context: Context,
+        deletedCount: Int,
+        freedBytes: Long,
+        newFolders: List<ImageFolder> = emptyList()
+    ) {
         if (Build.VERSION.SDK_INT >= 33 &&
             context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
@@ -42,11 +48,17 @@ object Notifier {
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val text = "清理了 $deletedCount 张过期图片，释放约 " +
+        val cleanText = "清理了 $deletedCount 张过期图片，释放约 " +
             Formatter.formatShortFileSize(context, freedBytes)
+        val folderText = if (newFolders.isNotEmpty()) {
+            val folderNames = newFolders.take(3).joinToString("、") { it.label }
+            "发现新的图片文件夹：$folderNames${if (newFolders.size > 3) " 等" else ""}。" +
+                "请到 Google Photos 检查备份。"
+        } else ""
+        val text = listOf(cleanText, folderText).filter { it.isNotEmpty() }.joinToString("\n")
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("自动清理完成")
+            .setContentTitle(if (newFolders.isEmpty()) "自动清理完成" else "自动清理后发现新文件夹")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(contentIntent)

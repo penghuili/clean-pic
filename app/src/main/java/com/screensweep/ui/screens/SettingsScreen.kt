@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.screensweep.MainViewModel
 import com.screensweep.R
+import com.screensweep.data.ImageFolderCheck
 import com.screensweep.data.ImageSources
 import com.screensweep.data.labelForTreeUri
 import com.screensweep.ui.components.OnResumeEffect
@@ -81,6 +82,7 @@ fun SettingsScreen(vm: MainViewModel) {
     }
 
     var message by remember { mutableStateOf<String?>(null) }
+    var folderCheck by remember { mutableStateOf<ImageFolderCheck?>(null) }
     var showKept by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val keptCount = (s?.keptPaths?.size ?: 0) + keptShots.size
@@ -245,10 +247,11 @@ fun SettingsScreen(vm: MainViewModel) {
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = {
-                            vm.cleanNow { c, b ->
+                            vm.cleanNow { c, b, check ->
                                 message = if (c > 0)
                                     "已清理 $c 张图片，释放 ${approximateSize(b)}"
                                 else "没有需要清理的图片"
+                                if (check.folders.isNotEmpty()) folderCheck = check
                             }
                         },
                         enabled = storageOk
@@ -302,7 +305,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         Column {
                             Text("净图 · 本地图片整理", style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "v1.1.1 · 本地图片整理",
+                                "v1.1.2 · 本地图片整理",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -311,6 +314,53 @@ fun SettingsScreen(vm: MainViewModel) {
                 }
             }
         }
+    }
+
+    folderCheck?.let { check ->
+        val photosInstalled = remember {
+            context.packageManager.getLaunchIntentForPackage("com.google.android.apps.photos") != null
+        }
+        AlertDialog(
+            onDismissRequest = { folderCheck = null },
+            title = {
+                Text(if (check.firstCheck) "请检查 Google Photos 的备份文件夹" else "发现新的图片文件夹")
+            },
+            text = {
+                Column {
+                    Text(
+                        if (check.firstCheck) {
+                            "这是净图第一次检查到的图片文件夹。请在 Google Photos 的备份设置中确认需要备份哪些文件夹。"
+                        } else {
+                            "删除后发现了以前没见过的图片文件夹。Google Photos 可能不会自动把它加入备份，请检查。"
+                        }
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    check.folders.take(12).forEach { folder ->
+                        Text("• ${folder.label}（${folder.imageCount} 张）")
+                    }
+                    if (check.folders.size > 12) {
+                        Spacer(Modifier.height(4.dp))
+                        Text("还有 ${check.folders.size - 12} 个文件夹未展开")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("建议在 Google Photos 中开启“自动包含新文件夹”；净图提醒只是补充检查。")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { folderCheck = null }) { Text("知道了") }
+            },
+            dismissButton = if (photosInstalled) {
+                {
+                    TextButton(
+                        onClick = {
+                            context.packageManager
+                                .getLaunchIntentForPackage("com.google.android.apps.photos")
+                                ?.let(context::startActivity)
+                        }
+                    ) { Text("打开 Google Photos") }
+                }
+            } else null
+        )
     }
 
     if (showKept && s != null) {

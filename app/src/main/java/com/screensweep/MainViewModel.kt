@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.screensweep.data.DownloadItem
+import com.screensweep.data.ImageFolderCheck
 import com.screensweep.data.MediaRepository
 import com.screensweep.data.Settings
 import com.screensweep.data.SettingsRepository
@@ -24,6 +25,12 @@ private data class RefreshData(
     val shots: List<ShotItem>,
     val keptShots: List<ShotItem>,
     val downloads: List<DownloadItem>
+)
+
+private data class DeleteResult(
+    val count: Int,
+    val bytes: Long,
+    val folderCheck: ImageFolderCheck
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -72,9 +79,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun deleteShots(items: List<ShotItem>, onDone: (Int, Long) -> Unit) {
+    fun deleteShots(items: List<ShotItem>, onDone: (Int, Long, ImageFolderCheck) -> Unit) {
         viewModelScope.launch {
-            val (count, bytes) = withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
+                // 在删除前取快照，避免删掉某文件夹最后一张图片后漏提醒。
+                val folderSnapshot = mediaRepo.queryImageFolders()
                 var c = 0
                 var b = 0L
                 for (s in items) {
@@ -83,10 +92,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         b += s.size
                     }
                 }
-                c to b
+                DeleteResult(
+                    count = c,
+                    bytes = b,
+                    folderCheck = if (c > 0) {
+                        settingsRepo.rememberImageFolders(folderSnapshot)
+                    } else {
+                        ImageFolderCheck()
+                    }
+                )
             }
             refresh()
-            onDone(count, bytes)
+            onDone(result.count, result.bytes, result.folderCheck)
         }
     }
 
@@ -183,21 +200,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 手动触发一次与自动清理同样规则的清理 */
-    fun cleanNow(onDone: (Int, Long) -> Unit) {
+    fun cleanNow(onDone: (Int, Long, ImageFolderCheck) -> Unit) {
         viewModelScope.launch {
             val s = settings.value ?: return@launch
             val cutoff = System.currentTimeMillis() - s.retainDays * 24L * 60 * 60 * 1000
-            val (count, bytes) = withContext(Dispatchers.IO) {
-                mediaRepo.cleanOldScreenshots(
+            val result = withContext(Dispatchers.IO) {
+                // 同样使用删除前快照，保证清空新文件夹时也能提示。
+                val folderSnapshot = mediaRepo.queryImageFolders()
+                val deleted = mediaRepo.cleanOldScreenshots(
                     cutoff,
                     s.keptPaths,
                     s.keptIds,
                     s.autoCleanFolders,
                     s.customFolderUris
                 )
+                DeleteResult(
+                    count = deleted.first,
+                    bytes = deleted.second,
+                    folderCheck = if (deleted.first > 0) {
+                        settingsRepo.rememberImageFolders(folderSnapshot)
+                    } else {
+                        ImageFolderCheck()
+                    }
+                )
             }
             refresh()
-            onDone(count, bytes)
+            onDone(result.count, result.bytes, result.folderCheck)
         }
     }
 }

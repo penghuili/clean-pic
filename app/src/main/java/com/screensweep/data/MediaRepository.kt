@@ -64,12 +64,74 @@ data class DownloadItem(
     val modifiedMs: Long
 )
 
+data class ImageFolder(
+    val key: String,
+    val label: String,
+    val imageCount: Int
+)
+
 class MediaRepository(private val context: Context) {
 
     companion object {
         private const val KEPT_RELATIVE_PATH = "Pictures/CleanPic/Kept/"
         private const val SCREENSHOTS_RELATIVE_PATH = "Pictures/Screenshots/"
     }
+
+    /** 查询设备媒体库中所有包含图片的文件夹，不修改任何文件。 */
+    fun queryImageFolders(): List<ImageFolder> {
+        val projection = mutableListOf(
+            MediaStore.Images.Media.DISPLAY_NAME,
+            MediaStore.Images.Media.BUCKET_DISPLAY_NAME
+        )
+        if (Build.VERSION.SDK_INT >= 29) {
+            projection += MediaStore.Images.Media.RELATIVE_PATH
+        } else {
+            projection += MediaStore.Images.Media.DATA
+        }
+
+        val counts = linkedMapOf<String, Int>()
+        try {
+            context.contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection.toTypedArray(),
+                null,
+                null,
+                null
+            )?.use { c ->
+                val iBucket = c.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
+                val iLocation = if (Build.VERSION.SDK_INT >= 29) {
+                    c.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH)
+                } else {
+                    c.getColumnIndex(MediaStore.Images.Media.DATA)
+                }
+                while (c.moveToNext()) {
+                    val bucket = if (iBucket >= 0) c.getString(iBucket).orEmpty() else ""
+                    val location = if (iLocation >= 0) c.getString(iLocation).orEmpty() else ""
+                    val key = imageFolderKey(location, bucket)
+                    if (key.isNotEmpty()) counts[key] = (counts[key] ?: 0) + 1
+                }
+            }
+        } catch (_: Exception) {
+            return emptyList()
+        }
+        return counts.map { (key, count) ->
+            ImageFolder(key = key, label = imageFolderLabel(key), imageCount = count)
+        }.sortedBy { it.key.lowercase() }
+    }
+
+    private fun imageFolderKey(location: String, bucket: String): String {
+        if (Build.VERSION.SDK_INT >= 29 && location.isNotBlank()) {
+            return location.trim().trim('/').replace(Regex("/+"), "/")
+        }
+        if (location.isNotBlank()) {
+            val parent = File(location).parent
+            if (!parent.isNullOrBlank()) return parent
+        }
+        return bucket.trim()
+    }
+
+    private fun imageFolderLabel(key: String): String =
+        key.split('/').filter { it.isNotBlank() }.joinToString(" / ")
 
     /**
      * 查询截图目录和 ChatGPT 目录里的图片，绝不动其他照片。
