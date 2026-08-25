@@ -47,7 +47,8 @@ class App : Application() {
             val initialDelay = (nextRun.timeInMillis - now.timeInMillis).coerceAtLeast(1_000L)
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 AUTO_CLEAN_WORK,
-                ExistingPeriodicWorkPolicy.UPDATE,
+                // 修改时间时必须取消旧周期任务并重新计算首次延迟；UPDATE 会保留旧 enqueue 时间。
+                ExistingPeriodicWorkPolicy.REPLACE,
                 PeriodicWorkRequestBuilder<CleanWorker>(1, TimeUnit.DAYS)
                     .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
                     .build()

@@ -48,7 +48,7 @@ object Notifier {
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val cleanText = "清理了 $deletedCount 张过期图片，释放约 " +
+        val cleanText = "清理了 $deletedCount 个过期文件，释放约 " +
             Formatter.formatShortFileSize(context, freedBytes)
         val folderText = if (newFolders.isNotEmpty()) {
             val folderNames = newFolders.take(3).joinToString("、") { it.label }
