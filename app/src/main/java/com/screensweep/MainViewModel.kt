@@ -164,6 +164,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { settingsRepo.setRetainDays(days) }
     }
 
+    fun setAutoCleanTime(hour: Int, minute: Int) {
+        viewModelScope.launch {
+            settingsRepo.setAutoCleanTime(hour, minute)
+            App.scheduleAutoClean(getApplication(), hour, minute)
+        }
+    }
+
     fun setAutoCleanFolder(sourceKey: String, enabled: Boolean) {
         viewModelScope.launch { settingsRepo.setAutoCleanFolder(sourceKey, enabled) }
     }

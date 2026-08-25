@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CleaningServices
@@ -40,8 +41,10 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,6 +68,7 @@ import com.screensweep.ui.components.OnResumeEffect
 import com.screensweep.util.Permissions
 import com.screensweep.util.approximateSize
 import kotlin.math.roundToInt
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +88,7 @@ fun SettingsScreen(vm: MainViewModel) {
     var message by remember { mutableStateOf<String?>(null) }
     var folderCheck by remember { mutableStateOf<ImageFolderCheck?>(null) }
     var showKept by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val keptCount = (s?.keptPaths?.size ?: 0) + keptShots.size
 
@@ -244,6 +249,15 @@ fun SettingsScreen(vm: MainViewModel) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = { showTimePicker = true },
+                        enabled = s.autoCleanEnabled
+                    ) {
+                        Icon(Icons.Rounded.AccessTime, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("每天 ${formatTime(s.autoCleanHour, s.autoCleanMinute)} 运行")
+                    }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = {
@@ -428,6 +442,30 @@ fun SettingsScreen(vm: MainViewModel) {
             }
         )
     }
+
+    if (showTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = s?.autoCleanHour ?: 3,
+            initialMinute = s?.autoCleanMinute ?: 0,
+            is24Hour = true
+        )
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            title = { Text("设置每日运行时间") },
+            text = { TimePicker(state = timePickerState) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.setAutoCleanTime(timePickerState.hour, timePickerState.minute)
+                        showTimePicker = false
+                    }
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text("取消") }
+            }
+        )
+    }
 }
 
 @Composable
@@ -482,7 +520,11 @@ private fun SettingsCard(title: String, content: @Composable () -> Unit) {
             content()
         }
     }
+
 }
+
+private fun formatTime(hour: Int, minute: Int): String =
+    String.format(Locale.ROOT, "%02d:%02d", hour, minute)
 
 @Composable
 private fun PermissionRow(label: String, ok: Boolean, onRequest: () -> Unit) {

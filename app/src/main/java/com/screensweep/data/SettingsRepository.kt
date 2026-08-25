@@ -15,6 +15,8 @@ private val defaultAutoCleanFolders = setOf(ImageSources.SCREENSHOTS, ImageSourc
 data class Settings(
     val autoCleanEnabled: Boolean = false,
     val retainDays: Int = 7,
+    val autoCleanHour: Int = 3,
+    val autoCleanMinute: Int = 0,
     val keptPaths: Set<String> = emptySet(),
     val keptIds: Set<String> = emptySet(),
     val autoCleanFolders: Set<String> = defaultAutoCleanFolders,
@@ -31,6 +33,8 @@ class SettingsRepository(private val context: Context) {
     private object Keys {
         val AUTO = booleanPreferencesKey("auto_clean_enabled")
         val DAYS = intPreferencesKey("retain_days")
+        val AUTO_HOUR = intPreferencesKey("auto_clean_hour")
+        val AUTO_MINUTE = intPreferencesKey("auto_clean_minute")
         val KEPT_PATHS = stringSetPreferencesKey("kept_paths")
         val KEPT_IDS = stringSetPreferencesKey("kept_ids")
         val AUTO_FOLDERS = stringSetPreferencesKey("auto_clean_folders")
@@ -43,6 +47,8 @@ class SettingsRepository(private val context: Context) {
         Settings(
             autoCleanEnabled = p[Keys.AUTO] ?: false,
             retainDays = (p[Keys.DAYS] ?: 7).coerceIn(1, 90),
+            autoCleanHour = (p[Keys.AUTO_HOUR] ?: 3).coerceIn(0, 23),
+            autoCleanMinute = (p[Keys.AUTO_MINUTE] ?: 0).coerceIn(0, 59),
             keptPaths = p[Keys.KEPT_PATHS] ?: emptySet(),
             keptIds = p[Keys.KEPT_IDS] ?: emptySet(),
             autoCleanFolders = p[Keys.AUTO_FOLDERS] ?: defaultAutoCleanFolders,
@@ -56,6 +62,13 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setRetainDays(days: Int) {
         context.dataStore.edit { it[Keys.DAYS] = days.coerceIn(1, 90) }
+    }
+
+    suspend fun setAutoCleanTime(hour: Int, minute: Int) {
+        context.dataStore.edit {
+            it[Keys.AUTO_HOUR] = hour.coerceIn(0, 23)
+            it[Keys.AUTO_MINUTE] = minute.coerceIn(0, 59)
+        }
     }
 
     suspend fun setAutoCleanFolder(sourceKey: String, enabled: Boolean) {
