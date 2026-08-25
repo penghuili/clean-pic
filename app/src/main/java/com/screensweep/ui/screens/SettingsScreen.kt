@@ -241,7 +241,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         value = days,
                         onValueChange = { days = it },
                         onValueChangeFinished = { vm.setRetainDays(days.roundToInt()) },
-                        valueRange = 1f..60f,
+                        valueRange = 3f..7f,
                         enabled = s.autoCleanEnabled
                     )
                     Text(
@@ -319,7 +319,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         Column {
                             Text("净图 · 本地图片整理", style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "v1.4.1 · 本地文件整理",
+                                "v1.4.2 · 本地文件整理",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

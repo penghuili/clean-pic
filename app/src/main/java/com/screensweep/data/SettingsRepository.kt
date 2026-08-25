@@ -51,7 +51,7 @@ class SettingsRepository(private val context: Context) {
     val settings: Flow<Settings> = context.dataStore.data.map { p ->
         Settings(
             autoCleanEnabled = p[Keys.AUTO] ?: false,
-            retainDays = (p[Keys.DAYS] ?: 7).coerceIn(1, 90),
+            retainDays = (p[Keys.DAYS] ?: 7).coerceIn(3, 7),
             autoCleanHour = (p[Keys.AUTO_HOUR] ?: 3).coerceIn(0, 23),
             autoCleanMinute = (p[Keys.AUTO_MINUTE] ?: 0).coerceIn(0, 59),
             keptPaths = p[Keys.KEPT_PATHS] ?: emptySet(),
@@ -76,7 +76,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setRetainDays(days: Int) {
-        context.dataStore.edit { it[Keys.DAYS] = days.coerceIn(1, 90) }
+        context.dataStore.edit { it[Keys.DAYS] = days.coerceIn(3, 7) }
     }
 
     suspend fun setAutoCleanTime(hour: Int, minute: Int) {
