@@ -26,9 +26,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Android
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.FolderZip
+import androidx.compose.material.icons.rounded.InsertDriveFile
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SelectAll
@@ -60,8 +67,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -106,7 +115,7 @@ fun ScreenshotsScreen(vm: MainViewModel) {
     }
     val totalSize = remember(shots) { shots.sumOf { it.size } }
 
-    val selected = remember { mutableStateMapOf<Long, ShotItem>() }
+    val selected = remember { mutableStateMapOf<String, ShotItem>() }
     var preview by remember { mutableStateOf<ShotItem?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     var folderCheck by remember { mutableStateOf<ImageFolderCheck?>(null) }
@@ -126,7 +135,7 @@ fun ScreenshotsScreen(vm: MainViewModel) {
         if (older.isEmpty()) {
             message = "没有 $days 天前的图片"
         } else {
-            older.forEach { selected[it.id] = it }
+            older.forEach { selected[it.path] = it }
         }
     }
 
@@ -137,9 +146,9 @@ fun ScreenshotsScreen(vm: MainViewModel) {
                 TopAppBar(
                     title = {
                         Column {
-                            Text("图片", style = MaterialTheme.typography.titleLarge)
+                            Text("文件", style = MaterialTheme.typography.titleLarge)
                             Text(
-                                "共 ${shots.size} 张 · ${formatSize(context, totalSize)} · 长按多选",
+                                "共 ${shots.size} 项 · ${formatSize(context, totalSize)} · 长按多选",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -151,7 +160,7 @@ fun ScreenshotsScreen(vm: MainViewModel) {
                         }
                         IconButton(onClick = {
                             if (selected.size == shots.size && shots.isNotEmpty()) selected.clear()
-                            else shots.forEach { selected[it.id] = it }
+                            else shots.forEach { selected[it.path] = it }
                         }) {
                             Icon(Icons.Rounded.SelectAll, contentDescription = "全选")
                         }
@@ -207,18 +216,27 @@ fun ScreenshotsScreen(vm: MainViewModel) {
                     allSelected = selected.size == shots.size,
                     onKeep = {
                         val items = selected.values.toList()
-                        vm.keepShots(items) { kept, failed ->
-                            message = if (failed == 0) {
-                                "已保留 $kept 项，已移到保留图片目录"
-                            } else {
-                                "已移动 $kept 项，$failed 项移动失败"
+                        val images = items.filter { it.isImage }
+                        val files = items.filterNot { it.isImage }
+                        if (images.isNotEmpty()) {
+                            vm.keepShots(images) { kept, failed ->
+                                message = if (failed == 0) {
+                                    "已保留 $kept 项，已移到保留图片目录"
+                                } else {
+                                    "已移动 $kept 项，$failed 项移动失败"
+                                }
+                            }
+                        }
+                        if (files.isNotEmpty()) {
+                            vm.keepNonImageFiles(files) {
+                                message = "已保留 ${files.size} 个文件，不再自动清理"
                             }
                         }
                         selected.clear()
                     },
                     onSelectAll = {
                         if (selected.size == shots.size) selected.clear()
-                        else shots.forEach { selected[it.id] = it }
+                        else shots.forEach { selected[it.path] = it }
                     },
                     onDelete = { confirmDelete = true }
                 )
@@ -233,7 +251,7 @@ fun ScreenshotsScreen(vm: MainViewModel) {
             ) {
                 EmptyState(
                     icon = Icons.Rounded.PhotoLibrary,
-                    title = "没有需要清理的图片",
+                    title = "没有需要清理的文件",
                     subtitle = "下拉刷新，或去设置里开启自动清理"
                 )
             }
@@ -260,26 +278,38 @@ fun ScreenshotsScreen(vm: MainViewModel) {
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                "${items.size} 张",
+                                "${items.size} 项",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-                    items(items, key = { it.id }) { shot ->
-                        ShotCell(
-                            shot = shot,
-                            isSelected = selected.containsKey(shot.id),
-                            onClick = {
-                                if (selected.isNotEmpty()) {
-                                    if (selected.containsKey(shot.id)) selected.remove(shot.id)
-                                    else selected[shot.id] = shot
-                                } else {
-                                    preview = shot
-                                }
-                            },
-                            onLongClick = { selected[shot.id] = shot }
-                        )
+                    items(items, key = { it.path }) { shot ->
+                        if (shot.isImage) {
+                            ShotCell(
+                                shot = shot,
+                                isSelected = selected.containsKey(shot.path),
+                                onClick = {
+                                    if (selected.isNotEmpty()) {
+                                        if (selected.containsKey(shot.path)) selected.remove(shot.path)
+                                        else selected[shot.path] = shot
+                                    } else {
+                                        preview = shot
+                                    }
+                                },
+                                onLongClick = { selected[shot.path] = shot }
+                            )
+                        } else {
+                            FileCell(
+                                item = shot,
+                                isSelected = selected.containsKey(shot.path),
+                                onClick = {
+                                    if (selected.containsKey(shot.path)) selected.remove(shot.path)
+                                    else selected[shot.path] = shot
+                                },
+                                onLongClick = { selected[shot.path] = shot }
+                            )
+                        }
                     }
                 }
             }
@@ -309,15 +339,15 @@ fun ScreenshotsScreen(vm: MainViewModel) {
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("删除 ${selected.size} 张图片？") },
-            text = { Text("删除后无法恢复。若想保留某些图片，可以先「保留」再清理。") },
+            title = { Text("删除 ${selected.size} 项？") },
+            text = { Text("图片或文件删除后无法恢复。若想保留某些内容，可以先「保留」再清理。") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         confirmDelete = false
                         val items = selected.values.toList()
                         vm.deleteShots(items) { c, b, check ->
-                            message = "已删除 $c 张，释放 ${formatSize(context, b)}"
+                            message = "已删除 $c 项，释放 ${formatSize(context, b)}"
                             if (check.folders.isNotEmpty()) folderCheck = check
                         }
                         selected.clear()
@@ -437,6 +467,82 @@ private fun ShotCell(
                 )
             }
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FileCell(
+    item: ShotItem,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val extension = item.name.substringAfterLast('.', "").uppercase()
+    Box(
+        Modifier
+            .aspectRatio(1f)
+            .fillMaxWidth()
+            .padding(1.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                fileIconFor(item.name),
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                if (extension.isBlank()) "文件" else extension,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                item.name,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (isSelected) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .size(22.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Rounded.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+private fun fileIconFor(name: String): ImageVector {
+    return when (name.substringAfterLast('.', "").lowercase()) {
+        "apk", "xapk" -> Icons.Rounded.Android
+        "zip", "rar", "7z", "tar", "gz", "bz2" -> Icons.Rounded.FolderZip
+        "pdf" -> Icons.Rounded.PictureAsPdf
+        "mp4", "mkv", "avi", "mov", "webm", "3gp", "ts" -> Icons.Rounded.Movie
+        "mp3", "wav", "flac", "aac", "ogg", "m4a", "opus" -> Icons.Rounded.MusicNote
+        "doc", "docx", "txt", "md", "xls", "xlsx", "ppt", "pptx", "csv" ->
+            Icons.Rounded.Description
+        else -> Icons.Rounded.InsertDriveFile
     }
 }
 

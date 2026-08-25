@@ -52,7 +52,8 @@ data class ShotItem(
     val size: Long,
     val sourceKey: String = ImageSources.SCREENSHOTS,
     val sourceLabel: String = "截图",
-    val customUri: Uri? = null
+    val customUri: Uri? = null,
+    val isImage: Boolean = true
 ) {
     val uri: Uri
         get() = customUri
@@ -157,7 +158,7 @@ class MediaRepository(private val context: Context) {
                 "${Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath}${File.separator}%"
             )
         }
-        return queryImages(selection, args.toTypedArray()).filter { it.looksLikeManagedImage }
+        return queryImages(selection, args.toTypedArray()).filter { it.isManagedItem }
     }
 
     /** Images physically moved to the app's kept-images folder. */
@@ -297,12 +298,36 @@ class MediaRepository(private val context: Context) {
         }
     }
 
+    /** Download 目录中的非图片文件；图片由 MediaStore 图片查询负责展示。 */
+    fun queryDownloadFiles(): List<ShotItem> {
+        val root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!root.isDirectory) return emptyList()
+        return root.walkTopDown()
+            .onFail { _, _ -> }
+            .filter { it.isFile && it.name != ".nomedia" && !isImageName(it.name) }
+            .map { file ->
+                ShotItem(
+                    id = -file.absolutePath.hashCode().toLong(),
+                    name = file.relativeTo(root).path,
+                    path = file.absolutePath,
+                    bucket = "Download",
+                    addedMs = file.lastModified(),
+                    size = file.length(),
+                    sourceKey = ImageSources.DOWNLOADS,
+                    sourceLabel = "下载",
+                    isImage = false
+                )
+            }
+            .toList()
+            .sortedByDescending { it.addedMs }
+    }
+
     private fun isImageName(name: String): Boolean =
         name.substringAfterLast('.', "").lowercase() in
             setOf("jpg", "jpeg", "png", "gif", "webp", "heic", "bmp", "avif")
 
-    /** 最后一道保险：只有路径或相册名确实是受支持的图片目录才允许操作 */
-    private val ShotItem.looksLikeManagedImage: Boolean
+    /** 最后一道保险：只有受支持目录中的项目才允许操作。 */
+    private val ShotItem.isManagedItem: Boolean
         get() = ImageSources.isCustomKey(sourceKey) ||
             sourceKey in setOf(ImageSources.SCREENSHOTS, ImageSources.CHATGPT, ImageSources.DOWNLOADS)
             || path.contains("screenshot", true)
@@ -316,7 +341,7 @@ class MediaRepository(private val context: Context) {
 
     /** Move a managed image out of its source folder into the kept folder. */
     fun moveShotToKept(item: ShotItem): Boolean {
-        if (!item.looksLikeManagedImage) return false
+        if (!item.isImage || !item.isManagedItem) return false
         if (ImageSources.isCustomKey(item.sourceKey)) {
             return copyCustomFileToKept(item)
         }
@@ -482,7 +507,8 @@ class MediaRepository(private val context: Context) {
         ) ?: "image/*"
 
     fun deleteShot(item: ShotItem): Boolean {
-        if (!item.looksLikeManagedImage) return false
+        if (!item.isManagedItem) return false
+        if (!item.isImage) return deleteDownloadFile(item)
         if (ImageSources.isCustomKey(item.sourceKey)) {
             return try {
                 DocumentFile.fromSingleUri(context, item.uri)?.delete() == true
@@ -504,7 +530,7 @@ class MediaRepository(private val context: Context) {
         }
     }
 
-    /** 删除超过 [olderThanMs] 的受支持图片，跳过已保留项；返回 (删除数量, 释放字节数) */
+    /** 删除超过 [olderThanMs] 的受支持项目，跳过已保留项；返回 (删除数量, 释放字节数) */
     fun cleanOldScreenshots(
         olderThanMs: Long,
         keptPaths: Set<String>,
@@ -514,9 +540,9 @@ class MediaRepository(private val context: Context) {
     ): Pair<Int, Long> {
         var count = 0
         var bytes = 0L
-        val allImages = (queryScreenshots() + queryCustomFolders(customFolderUris))
-            .distinctBy { it.uri.toString() }
-        for (s in allImages) {
+        val allItems = (queryScreenshots() + queryCustomFolders(customFolderUris) + queryDownloadFiles())
+            .distinctBy { if (it.path.isNotBlank()) it.path else it.uri.toString() }
+        for (s in allItems) {
             if (s.sourceKey !in enabledSources) continue
             if (s.addedMs < olderThanMs && s.path !in keptPaths && s.id.toString() !in keptIds) {
                 if (deleteShot(s)) {
@@ -526,6 +552,24 @@ class MediaRepository(private val context: Context) {
             }
         }
         return count to bytes
+    }
+
+    private fun deleteDownloadFile(item: ShotItem): Boolean {
+        val root = Environment.getExternalStoragePublicDirectory(
+            Environment.DIRECTORY_DOWNLOADS
+        ).canonicalFile
+        val file = try {
+            File(item.path).canonicalFile
+        } catch (_: Exception) {
+            return false
+        }
+        val rootPath = root.path + File.separator
+        if (!file.path.startsWith(rootPath)) return false
+        return try {
+            file.delete()
+        } catch (_: Exception) {
+            false
+        }
     }
 
 }

@@ -10,7 +10,7 @@ import com.screensweep.util.Permissions
 import kotlinx.coroutines.flow.first
 
 /**
- * 每天执行一次：若用户开启了自动清理，则删除超过保留天数的截图
+ * 每天执行一次：若用户开启了自动清理，则删除超过保留天数的文件
  * （已保留的条目永远跳过），完成后发送通知。
  */
 class CleanWorker(context: Context, params: WorkerParameters) :

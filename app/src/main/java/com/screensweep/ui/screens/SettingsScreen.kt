@@ -203,7 +203,7 @@ fun SettingsScreen(vm: MainViewModel) {
 
             // ---------- 自动清理 ----------
             item {
-                SettingsCard(title = "自动清理图片") {
+                SettingsCard(title = "自动清理文件") {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Rounded.CleaningServices,
@@ -217,7 +217,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                "每天检查图片页选中的目录，删除超过保留天数的图片，完成后发通知",
+                                "每天检查文件页选中的目录，删除超过保留天数的文件，完成后发通知",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -245,7 +245,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         enabled = s.autoCleanEnabled
                     )
                     Text(
-                        "更早的图片会被自动删除；保留的内容永远不会被动。",
+                        "更早的文件会被自动删除；保留的内容永远不会被动。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -263,8 +263,8 @@ fun SettingsScreen(vm: MainViewModel) {
                         onClick = {
                             vm.cleanNow { c, b, check ->
                                 message = if (c > 0)
-                                    "已清理 $c 张图片，释放 ${approximateSize(b)}"
-                                else "没有需要清理的图片"
+                                    "已清理 $c 项，释放 ${approximateSize(b)}"
+                                else "没有需要清理的文件"
                                 if (check.folders.isNotEmpty()) folderCheck = check
                             }
                         },
@@ -291,7 +291,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                "图片会移到 Pictures/CleanPic/Kept",
+                        "图片会移到 Pictures/CleanPic/Kept，其他文件加入保留列表",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -319,7 +319,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         Column {
                             Text("净图 · 本地图片整理", style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "v1.1.2 · 本地图片整理",
+                                "v1.4.0 · 本地文件整理",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -399,7 +399,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    "保留图片目录",
+                                    "保留目录",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

@@ -57,10 +57,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _scanning.value = true
             val savedSettings = settingsRepo.settings.first()
             val data = withContext(Dispatchers.IO) {
-                val existingShots = (
-                    mediaRepo.queryScreenshots() +
-                        mediaRepo.queryCustomFolders(savedSettings.customFolderUris)
-                    ).distinctBy { it.uri.toString() }
+                    val existingShots = (
+                        mediaRepo.queryScreenshots() +
+                        mediaRepo.queryCustomFolders(savedSettings.customFolderUris) +
+                        mediaRepo.queryDownloadFiles()
+                    ).distinctBy { if (it.path.isNotBlank()) it.path else it.uri.toString() }
                 RefreshData(
                     shots = existingShots,
                     keptShots = mediaRepo.queryKeptScreenshots()
@@ -76,7 +77,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
                 // 在删除前取快照，避免删掉某文件夹最后一张图片后漏提醒。
-                val folderSnapshot = mediaRepo.queryImageFolders()
+                val hasImages = items.any { it.isImage }
+                val folderSnapshot = if (hasImages) mediaRepo.queryImageFolders() else emptyList()
                 var c = 0
                 var b = 0L
                 for (s in items) {
@@ -88,7 +90,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 DeleteResult(
                     count = c,
                     bytes = b,
-                    folderCheck = if (c > 0) {
+                    folderCheck = if (c > 0 && hasImages) {
                         settingsRepo.rememberImageFolders(folderSnapshot)
                     } else {
                         ImageFolderCheck()
@@ -112,6 +114,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             refresh()
             onDone(kept, failed)
+        }
+    }
+
+    fun keepNonImageFiles(items: List<ShotItem>, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            settingsRepo.keepItems(items.map { it.path }.toSet(), emptySet())
+            refresh()
+            onDone()
         }
     }
 

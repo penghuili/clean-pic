@@ -74,7 +74,7 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
                         selected = selectedTab == 0,
                         onClick = { tab = 0 },
                         icon = { Icon(Icons.Rounded.PhotoLibrary, contentDescription = null) },
-                        label = { Text("图片") }
+                        label = { Text("文件") }
                     )
                     NavigationBarItem(
                         selected = selectedTab == 1,
@@ -127,8 +127,8 @@ private fun PermissionScreen() {
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "自动清理你选择的图片文件夹，包括 Download。\n\n" +
-                "· 只处理你选择的文件夹，绝不碰其他照片\n" +
+            "自动清理你选择的文件夹，包括 Download。\n\n" +
+                "· 只处理你选择的文件夹，绝不碰其他文件\n" +
                 "· 已保留的内容永远不会被清理\n" +
                 "· 全部在本地完成，不联网、不上传",
             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
