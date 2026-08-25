@@ -74,7 +74,7 @@ tasks.configureEach {
             source.copyTo(versioned, overwrite = true)
             outputDir.listFiles()
                 ?.filter { it.extension.equals("apk", ignoreCase = true) }
-                ?.filter { it != source && it != versioned }
+                ?.filter { it != versioned }
                 ?.forEach { staleApk ->
                     if (staleApk.delete()) {
                         logger.lifecycle("Removed stale release APK: ${staleApk.name}")
