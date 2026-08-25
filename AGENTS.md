@@ -21,13 +21,18 @@ After code changes:
 ```powershell
 git diff --check
 .\gradlew.bat assembleRelease
+.\gradlew.bat --stop
 ```
 
 The signed release APK is generated at:
 
 ```text
-app\build\outputs\apk\release\app-release.apk
+app\build\outputs\apk\release\clean-pic-v{versionName}.apk
 ```
+
+After each release build, stop the Gradle daemon with `.\gradlew.bat --stop` so
+the idle OpenJDK process does not remain running. Run this after the build
+finishes, including after a failed build when a daemon was started.
 
 `keystore.properties` and keystore files are local-only signing material. Never commit them or expose their contents.
 
@@ -50,9 +55,10 @@ For a completed change:
 
 1. Inspect the diff and run `git diff --check`.
 2. Build `assembleRelease` with JDK 17 and report the APK path.
-3. Stage only the intended source and documentation changes.
-4. Commit with a concise message describing the change.
-5. Push the commit to `origin main`.
-6. Report the commit, push result, build result, and release APK path.
+3. Stop the Gradle daemon with `.\gradlew.bat --stop`.
+4. Stage only the intended source and documentation changes.
+5. Commit with a concise message describing the change.
+6. Push the commit to `origin main`.
+7. Report the commit, push result, build result, and release APK path.
 
 Do not commit generated APKs, `app/build`, Gradle caches, local IDE files, or signing credentials.
