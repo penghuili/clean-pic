@@ -22,7 +22,9 @@ class App : Application() {
         super.onCreate()
         Notifier.ensureChannel(this)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            val settings = SettingsRepository(this@App).settings.first()
+            val settingsRepo = SettingsRepository(this@App)
+            settingsRepo.ensureDownloadSourceEnabled()
+            val settings = settingsRepo.settings.first()
             scheduleAutoClean(this@App, settings.autoCleanHour, settings.autoCleanMinute)
         }
         // 1.1.0 曾注册过云端同步任务；升级后立即取消，避免已移除的 Worker 被再次唤起。

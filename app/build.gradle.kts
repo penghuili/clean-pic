@@ -20,8 +20,8 @@ android {
         applicationId = "com.screensweep"
         minSdk = 26
         targetSdk = 34
-        versionCode = 6
-        versionName = "1.2.0"
+        versionCode = 7
+        versionName = "1.3.0"
     }
 
     signingConfigs {
@@ -60,6 +60,19 @@ android {
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
+}
+
+val releaseApkName = "clean-pic-v${android.defaultConfig.versionName}.apk"
+
+tasks.configureEach {
+    if (name == "assembleRelease") {
+        doLast {
+            val source = layout.buildDirectory.file("outputs/apk/release/app-release.apk").get().asFile
+            val versioned = source.resolveSibling(releaseApkName)
+            source.copyTo(versioned, overwrite = true)
+            logger.lifecycle("Versioned release APK: ${versioned.absolutePath}")
+        }
     }
 }
 

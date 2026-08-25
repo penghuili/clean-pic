@@ -10,7 +10,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
-private val defaultAutoCleanFolders = setOf(ImageSources.SCREENSHOTS, ImageSources.CHATGPT)
+private val defaultAutoCleanFolders = setOf(
+    ImageSources.SCREENSHOTS,
+    ImageSources.CHATGPT,
+    ImageSources.DOWNLOADS
+)
 
 data class Settings(
     val autoCleanEnabled: Boolean = false,
@@ -39,6 +43,7 @@ class SettingsRepository(private val context: Context) {
         val KEPT_IDS = stringSetPreferencesKey("kept_ids")
         val AUTO_FOLDERS = stringSetPreferencesKey("auto_clean_folders")
         val CUSTOM_FOLDERS = stringSetPreferencesKey("custom_folders")
+        val DOWNLOAD_SOURCE_MIGRATED = booleanPreferencesKey("download_source_migrated")
         val KNOWN_IMAGE_FOLDERS = stringSetPreferencesKey("known_image_folders")
         val IMAGE_FOLDER_BASELINE = booleanPreferencesKey("image_folder_baseline")
     }
@@ -58,6 +63,16 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setAutoClean(enabled: Boolean) {
         context.dataStore.edit { it[Keys.AUTO] = enabled }
+    }
+
+    suspend fun ensureDownloadSourceEnabled() {
+        context.dataStore.edit { p ->
+            if (p[Keys.DOWNLOAD_SOURCE_MIGRATED] != true) {
+                p[Keys.AUTO_FOLDERS] = (p[Keys.AUTO_FOLDERS] ?: defaultAutoCleanFolders) +
+                    ImageSources.DOWNLOADS
+                p[Keys.DOWNLOAD_SOURCE_MIGRATED] = true
+            }
+        }
     }
 
     suspend fun setRetainDays(days: Int) {

@@ -291,7 +291,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                "截图会移到 Pictures/CleanPic/Kept，下载文件保留在原位置",
+                                "图片会移到 Pictures/CleanPic/Kept",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

@@ -24,11 +24,13 @@ data class ImageSource(
 object ImageSources {
     const val SCREENSHOTS = "screenshots"
     const val CHATGPT = "chatgpt"
+    const val DOWNLOADS = "downloads"
     private const val CUSTOM_PREFIX = "tree:"
 
     val builtIns = listOf(
         ImageSource(SCREENSHOTS, "截图"),
-        ImageSource(CHATGPT, "ChatGPT")
+        ImageSource(CHATGPT, "ChatGPT"),
+        ImageSource(DOWNLOADS, "下载")
     )
 
     fun customKey(treeUri: String): String = CUSTOM_PREFIX + treeUri
@@ -56,13 +58,6 @@ data class ShotItem(
         get() = customUri
             ?: ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
 }
-
-data class DownloadItem(
-    val name: String,
-    val path: String,
-    val size: Long,
-    val modifiedMs: Long
-)
 
 data class ImageFolder(
     val key: String,
@@ -133,9 +128,7 @@ class MediaRepository(private val context: Context) {
     private fun imageFolderLabel(key: String): String =
         key.split('/').filter { it.isNotBlank() }.joinToString(" / ")
 
-    /**
-     * 查询截图目录和 ChatGPT 目录里的图片，绝不动其他照片。
-     */
+    /** 查询受支持图片目录里的图片，绝不动其他照片。 */
     fun queryScreenshots(): List<ShotItem> {
         val bucketColumn = MediaStore.Images.Media.BUCKET_DISPLAY_NAME
         val selection: String
@@ -145,20 +138,23 @@ class MediaRepository(private val context: Context) {
                 " OR " + bucketColumn + " LIKE ?" +
                 " OR " + bucketColumn + " IN (?,?)" +
                 " OR " + MediaStore.Images.Media.RELATIVE_PATH + " LIKE ?" +
-                " OR " + bucketColumn + " LIKE ? )"
+                " OR " + bucketColumn + " LIKE ?" +
+                " OR " + MediaStore.Images.Media.RELATIVE_PATH + " LIKE ? )"
             args = listOf(
                 "%Screenshots%", "%Screenshot%", "截屏", "屏幕截图",
-                "%ChatGPT%", "%ChatGPT%"
+                "%ChatGPT%", "%ChatGPT%", "${Environment.DIRECTORY_DOWNLOADS}/%"
             )
         } else {
             selection = "(" + MediaStore.Images.Media.DATA + " LIKE ?" +
                 " OR " + bucketColumn + " LIKE ?" +
                 " OR " + bucketColumn + " IN (?,?)" +
                 " OR " + MediaStore.Images.Media.DATA + " LIKE ?" +
-                " OR " + bucketColumn + " LIKE ? )"
+                " OR " + bucketColumn + " LIKE ?" +
+                " OR " + MediaStore.Images.Media.DATA + " LIKE ? )"
             args = listOf(
                 "%Screenshot%", "%Screenshot%", "截屏", "屏幕截图",
-                "%ChatGPT%", "%ChatGPT%"
+                "%ChatGPT%", "%ChatGPT%",
+                "${Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath}${File.separator}%"
             )
         }
         return queryImages(selection, args.toTypedArray()).filter { it.looksLikeManagedImage }
@@ -206,21 +202,29 @@ class MediaRepository(private val context: Context) {
                 val iDate = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
                 val iSize = c.getColumnIndexOrThrow(MediaStore.Images.Media.SIZE)
                 val iData = c.getColumnIndex(MediaStore.Images.Media.DATA)
+                val iRelativePath = if (Build.VERSION.SDK_INT >= 29) {
+                    c.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH)
+                } else {
+                    -1
+                }
                 while (c.moveToNext()) {
+                    val path = if (iData >= 0) c.getString(iData) ?: "" else ""
                     result += ShotItem(
                         id = c.getLong(iId),
                         name = c.getString(iName) ?: "",
-                        path = if (iData >= 0) c.getString(iData) ?: "" else "",
+                        path = path,
                         bucket = if (iBucket >= 0) c.getString(iBucket) ?: "" else "",
                         addedMs = c.getLong(iDate) * 1000L,
                         size = c.getLong(iSize),
                         sourceKey = classifySourceKey(
-                            if (iData >= 0) c.getString(iData) ?: "" else "",
-                            if (iBucket >= 0) c.getString(iBucket) ?: "" else ""
+                            path,
+                            if (iBucket >= 0) c.getString(iBucket) ?: "" else "",
+                            if (iRelativePath >= 0) c.getString(iRelativePath) ?: "" else ""
                         ),
                         sourceLabel = classifySourceLabel(
-                            if (iData >= 0) c.getString(iData) ?: "" else "",
-                            if (iBucket >= 0) c.getString(iBucket) ?: "" else ""
+                            path,
+                            if (iBucket >= 0) c.getString(iBucket) ?: "" else "",
+                            if (iRelativePath >= 0) c.getString(iRelativePath) ?: "" else ""
                         )
                     )
                 }
@@ -230,16 +234,28 @@ class MediaRepository(private val context: Context) {
         return result
     }
 
-    private fun classifySourceKey(path: String, bucket: String): String =
-        if (path.contains("chatgpt", true) || bucket.contains("chatgpt", true)) {
+    private fun classifySourceKey(path: String, bucket: String, relativePath: String): String =
+        if (path.contains("chatgpt", true) || bucket.contains("chatgpt", true) ||
+            relativePath.contains("chatgpt", true)
+        ) {
             ImageSources.CHATGPT
+        } else if (path.contains("download", true) || bucket.contains("download", true) ||
+            relativePath.contains("download", true)
+        ) {
+            ImageSources.DOWNLOADS
         } else {
             ImageSources.SCREENSHOTS
         }
 
-    private fun classifySourceLabel(path: String, bucket: String): String =
-        if (path.contains("chatgpt", true) || bucket.contains("chatgpt", true)) {
+    private fun classifySourceLabel(path: String, bucket: String, relativePath: String): String =
+        if (path.contains("chatgpt", true) || bucket.contains("chatgpt", true) ||
+            relativePath.contains("chatgpt", true)
+        ) {
             "ChatGPT"
+        } else if (path.contains("download", true) || bucket.contains("download", true) ||
+            relativePath.contains("download", true)
+        ) {
+            "下载"
         } else {
             "截图"
         }
@@ -287,13 +303,16 @@ class MediaRepository(private val context: Context) {
 
     /** 最后一道保险：只有路径或相册名确实是受支持的图片目录才允许操作 */
     private val ShotItem.looksLikeManagedImage: Boolean
-        get() = ImageSources.isCustomKey(sourceKey)
+        get() = ImageSources.isCustomKey(sourceKey) ||
+            sourceKey in setOf(ImageSources.SCREENSHOTS, ImageSources.CHATGPT, ImageSources.DOWNLOADS)
             || path.contains("screenshot", true)
             || bucket.contains("screenshot", true)
             || bucket == "截屏"
             || bucket == "屏幕截图"
             || path.contains("chatgpt", true)
             || bucket.contains("chatgpt", true)
+            || path.contains("download", true)
+            || bucket.contains("download", true)
 
     /** Move a managed image out of its source folder into the kept folder. */
     fun moveShotToKept(item: ShotItem): Boolean {
@@ -509,25 +528,4 @@ class MediaRepository(private val context: Context) {
         return count to bytes
     }
 
-    /** Download 目录顶层的文件（不递归），只做手动管理、永不自动删除 */
-    fun queryDownloads(): List<DownloadItem> {
-        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        val files = dir.listFiles() ?: return emptyList()
-        return files
-            .filter { it.isFile && it.name != ".nomedia" }
-            .map { DownloadItem(it.name, it.absolutePath, it.length(), it.lastModified()) }
-            .sortedByDescending { it.modifiedMs }
-    }
-
-    fun deleteDownload(item: DownloadItem): Boolean {
-        val downloadRoot = Environment.getExternalStoragePublicDirectory(
-            Environment.DIRECTORY_DOWNLOADS
-        ).absolutePath
-        if (!item.path.startsWith(downloadRoot)) return false
-        return try {
-            File(item.path).delete()
-        } catch (_: Exception) {
-            false
-        }
-    }
 }

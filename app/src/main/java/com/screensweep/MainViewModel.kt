@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.screensweep.data.DownloadItem
 import com.screensweep.data.ImageFolderCheck
 import com.screensweep.data.MediaRepository
 import com.screensweep.data.Settings
@@ -23,8 +22,7 @@ import kotlinx.coroutines.withContext
 
 private data class RefreshData(
     val shots: List<ShotItem>,
-    val keptShots: List<ShotItem>,
-    val downloads: List<DownloadItem>
+    val keptShots: List<ShotItem>
 )
 
 private data class DeleteResult(
@@ -47,9 +45,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _keptShots = MutableStateFlow<List<ShotItem>>(emptyList())
     val keptShots: StateFlow<List<ShotItem>> = _keptShots.asStateFlow()
 
-    private val _downloads = MutableStateFlow<List<DownloadItem>>(emptyList())
-    val downloads: StateFlow<List<DownloadItem>> = _downloads.asStateFlow()
-
     private val _scanning = MutableStateFlow(false)
     val scanning: StateFlow<Boolean> = _scanning.asStateFlow()
 
@@ -68,13 +63,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     ).distinctBy { it.uri.toString() }
                 RefreshData(
                     shots = existingShots,
-                    keptShots = mediaRepo.queryKeptScreenshots(),
-                    downloads = mediaRepo.queryDownloads()
+                    keptShots = mediaRepo.queryKeptScreenshots()
                 )
             }
             _shots.value = data.shots
             _keptShots.value = data.keptShots
-            _downloads.value = data.downloads
             _scanning.value = false
         }
     }
@@ -107,24 +100,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun deleteDownloads(items: List<DownloadItem>, onDone: (Int, Long) -> Unit) {
-        viewModelScope.launch {
-            val (count, bytes) = withContext(Dispatchers.IO) {
-                var c = 0
-                var b = 0L
-                for (d in items) {
-                    if (mediaRepo.deleteDownload(d)) {
-                        c++
-                        b += d.size
-                    }
-                }
-                c to b
-            }
-            refresh()
-            onDone(count, bytes)
-        }
-    }
-
     fun keepShots(items: List<ShotItem>, onDone: (Int, Int) -> Unit) {
         viewModelScope.launch {
             val (kept, failed) = withContext(Dispatchers.IO) {
@@ -145,14 +120,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val restored = withContext(Dispatchers.IO) { mediaRepo.restoreKeptShot(item) }
             refresh()
             onDone(restored)
-        }
-    }
-
-    fun keepDownloads(items: List<DownloadItem>, onDone: () -> Unit) {
-        viewModelScope.launch {
-            settingsRepo.keepItems(items.map { it.path }.toSet(), emptySet())
-            refresh()
-            onDone()
         }
     }
 

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Button
@@ -50,6 +49,7 @@ import com.screensweep.util.Permissions
 fun AppRoot(vm: MainViewModel = viewModel()) {
     val context = LocalContext.current
     var tab by rememberSaveable { mutableStateOf(0) }
+    val selectedTab = if (tab == 0) 0 else 1
     var storageGranted by remember {
         mutableStateOf(Permissions.hasStorageAccess(context))
     }
@@ -71,20 +71,14 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
             bottomBar = {
                 NavigationBar {
                     NavigationBarItem(
-                        selected = tab == 0,
+                        selected = selectedTab == 0,
                         onClick = { tab = 0 },
                         icon = { Icon(Icons.Rounded.PhotoLibrary, contentDescription = null) },
                         label = { Text("图片") }
                     )
                     NavigationBarItem(
-                        selected = tab == 1,
+                        selected = selectedTab == 1,
                         onClick = { tab = 1 },
-                        icon = { Icon(Icons.Rounded.Download, contentDescription = null) },
-                        label = { Text("下载") }
-                    )
-                    NavigationBarItem(
-                        selected = tab == 2,
-                        onClick = { tab = 2 },
                         icon = { Icon(Icons.Rounded.Settings, contentDescription = null) },
                         label = { Text("设置") }
                     )
@@ -98,7 +92,6 @@ fun AppRoot(vm: MainViewModel = viewModel()) {
             ) {
                 when (tab) {
                     0 -> ScreenshotsScreen(vm)
-                    1 -> DownloadsScreen(vm)
                     else -> SettingsScreen(vm)
                 }
             }
@@ -134,7 +127,7 @@ private fun PermissionScreen() {
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "自动清理你选择的图片文件夹，手动整理下载目录。\n\n" +
+            "自动清理你选择的图片文件夹，包括 Download。\n\n" +
                 "· 只处理你选择的文件夹，绝不碰其他照片\n" +
                 "· 已保留的内容永远不会被清理\n" +
                 "· 全部在本地完成，不联网、不上传",
