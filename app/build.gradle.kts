@@ -68,9 +68,18 @@ val releaseApkName = "clean-pic-v${android.defaultConfig.versionName}.apk"
 tasks.configureEach {
     if (name == "assembleRelease") {
         doLast {
-            val source = layout.buildDirectory.file("outputs/apk/release/app-release.apk").get().asFile
+            val outputDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+            val source = outputDir.resolve("app-release.apk")
             val versioned = source.resolveSibling(releaseApkName)
             source.copyTo(versioned, overwrite = true)
+            outputDir.listFiles()
+                ?.filter { it.extension.equals("apk", ignoreCase = true) }
+                ?.filter { it != source && it != versioned }
+                ?.forEach { staleApk ->
+                    if (staleApk.delete()) {
+                        logger.lifecycle("Removed stale release APK: ${staleApk.name}")
+                    }
+                }
             logger.lifecycle("Versioned release APK: ${versioned.absolutePath}")
         }
     }
