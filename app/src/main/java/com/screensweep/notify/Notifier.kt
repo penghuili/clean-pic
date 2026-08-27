@@ -48,8 +48,12 @@ object Notifier {
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val cleanText = "清理了 $deletedCount 个过期文件，释放约 " +
-            Formatter.formatShortFileSize(context, freedBytes)
+        val cleanText = if (deletedCount > 0) {
+            "清理了 $deletedCount 个过期文件，释放约 " +
+                Formatter.formatShortFileSize(context, freedBytes)
+        } else {
+            "没有需要清理的文件"
+        }
         val folderText = if (newFolders.isNotEmpty()) {
             val folderNames = newFolders.take(3).joinToString("、") { it.label }
             "发现新的图片文件夹：$folderNames${if (newFolders.size > 3) " 等" else ""}。" +

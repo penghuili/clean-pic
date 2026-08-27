@@ -25,7 +25,11 @@ class App : Application() {
             val settingsRepo = SettingsRepository(this@App)
             settingsRepo.ensureDownloadSourceEnabled()
             val settings = settingsRepo.settings.first()
-            scheduleAutoClean(this@App, settings.autoCleanHour, settings.autoCleanMinute)
+            if (settingsRepo.shouldMigrateAutoCleanSchedule()) {
+                scheduleAutoClean(this@App, settings.autoCleanHour, settings.autoCleanMinute)
+            } else {
+                ensureAutoCleanScheduled(this@App, settings.autoCleanHour, settings.autoCleanMinute)
+            }
         }
         // 1.1.0 曾注册过云端同步任务；升级后立即取消，避免已移除的 Worker 被再次唤起。
         WorkManager.getInstance(this).cancelUniqueWork("drive_sync_once")
@@ -35,7 +39,22 @@ class App : Application() {
     companion object {
         const val AUTO_CLEAN_WORK = "auto_clean_daily"
 
+        /** 应用启动时只补齐缺失的任务，不重置已有任务的下一次执行时间。 */
+        fun ensureAutoCleanScheduled(context: Context, hour: Int, minute: Int) {
+            enqueueAutoClean(context, hour, minute, ExistingPeriodicWorkPolicy.KEEP)
+        }
+
+        /** 用户修改运行时间时，立即按新的时间重新计算下一次执行。 */
         fun scheduleAutoClean(context: Context, hour: Int, minute: Int) {
+            enqueueAutoClean(context, hour, minute, ExistingPeriodicWorkPolicy.REPLACE)
+        }
+
+        private fun enqueueAutoClean(
+            context: Context,
+            hour: Int,
+            minute: Int,
+            policy: ExistingPeriodicWorkPolicy
+        ) {
             val now = Calendar.getInstance()
             val nextRun = Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, hour.coerceIn(0, 23))
@@ -47,8 +66,7 @@ class App : Application() {
             val initialDelay = (nextRun.timeInMillis - now.timeInMillis).coerceAtLeast(1_000L)
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 AUTO_CLEAN_WORK,
-                // 修改时间时必须取消旧周期任务并重新计算首次延迟；UPDATE 会保留旧 enqueue 时间。
-                ExistingPeriodicWorkPolicy.REPLACE,
+                policy,
                 PeriodicWorkRequestBuilder<CleanWorker>(1, TimeUnit.DAYS)
                     .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
                     .build()

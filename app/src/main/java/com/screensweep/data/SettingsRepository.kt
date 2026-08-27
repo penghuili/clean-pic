@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -21,6 +22,7 @@ data class Settings(
     val retainDays: Int = 7,
     val autoCleanHour: Int = 3,
     val autoCleanMinute: Int = 0,
+    val lastAutoCleanAt: Long? = null,
     val keptPaths: Set<String> = emptySet(),
     val keptIds: Set<String> = emptySet(),
     val autoCleanFolders: Set<String> = defaultAutoCleanFolders,
@@ -39,6 +41,8 @@ class SettingsRepository(private val context: Context) {
         val DAYS = intPreferencesKey("retain_days")
         val AUTO_HOUR = intPreferencesKey("auto_clean_hour")
         val AUTO_MINUTE = intPreferencesKey("auto_clean_minute")
+        val AUTO_SCHEDULE_VERSION = intPreferencesKey("auto_clean_schedule_version")
+        val LAST_AUTO_CLEAN_AT = longPreferencesKey("last_auto_clean_at")
         val KEPT_PATHS = stringSetPreferencesKey("kept_paths")
         val KEPT_IDS = stringSetPreferencesKey("kept_ids")
         val AUTO_FOLDERS = stringSetPreferencesKey("auto_clean_folders")
@@ -54,6 +58,7 @@ class SettingsRepository(private val context: Context) {
             retainDays = (p[Keys.DAYS] ?: 7).coerceIn(3, 7),
             autoCleanHour = (p[Keys.AUTO_HOUR] ?: 3).coerceIn(0, 23),
             autoCleanMinute = (p[Keys.AUTO_MINUTE] ?: 0).coerceIn(0, 59),
+            lastAutoCleanAt = p[Keys.LAST_AUTO_CLEAN_AT],
             keptPaths = p[Keys.KEPT_PATHS] ?: emptySet(),
             keptIds = p[Keys.KEPT_IDS] ?: emptySet(),
             autoCleanFolders = p[Keys.AUTO_FOLDERS] ?: defaultAutoCleanFolders,
@@ -63,6 +68,22 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setAutoClean(enabled: Boolean) {
         context.dataStore.edit { it[Keys.AUTO] = enabled }
+    }
+
+    suspend fun recordAutoCleanRun(at: Long = System.currentTimeMillis()) {
+        context.dataStore.edit { it[Keys.LAST_AUTO_CLEAN_AT] = at }
+    }
+
+    /** 1.4.3 首次启动时重排一次旧任务，之后启动只保留现有任务。 */
+    suspend fun shouldMigrateAutoCleanSchedule(): Boolean {
+        var shouldMigrate = false
+        context.dataStore.edit { p ->
+            if ((p[Keys.AUTO_SCHEDULE_VERSION] ?: 0) < 1) {
+                p[Keys.AUTO_SCHEDULE_VERSION] = 1
+                shouldMigrate = true
+            }
+        }
+        return shouldMigrate
     }
 
     suspend fun ensureDownloadSourceEnabled() {

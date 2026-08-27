@@ -134,7 +134,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setAutoClean(enabled: Boolean) {
-        viewModelScope.launch { settingsRepo.setAutoClean(enabled) }
+        viewModelScope.launch {
+            settingsRepo.setAutoClean(enabled)
+            if (enabled) {
+                val s = settingsRepo.settings.first()
+                App.scheduleAutoClean(getApplication(), s.autoCleanHour, s.autoCleanMinute)
+            }
+        }
     }
 
     fun setRetainDays(days: Int) {

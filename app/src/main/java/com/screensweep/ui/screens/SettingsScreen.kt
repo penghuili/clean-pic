@@ -67,6 +67,7 @@ import com.screensweep.data.labelForTreeUri
 import com.screensweep.ui.components.OnResumeEffect
 import com.screensweep.util.Permissions
 import com.screensweep.util.approximateSize
+import com.screensweep.util.formatDateTime
 import kotlin.math.roundToInt
 import java.util.Locale
 
@@ -246,6 +247,13 @@ fun SettingsScreen(vm: MainViewModel) {
                     )
                     Text(
                         "更早的文件会被自动删除；保留的内容永远不会被动。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        s.lastAutoCleanAt?.let { "上次自动清理：${formatDateTime(it)}" }
+                            ?: "上次自动清理：尚未执行",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

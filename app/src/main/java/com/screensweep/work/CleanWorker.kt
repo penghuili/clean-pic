@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.screensweep.data.MediaRepository
+import com.screensweep.data.ImageFolderCheck
 import com.screensweep.data.SettingsRepository
 import com.screensweep.notify.Notifier
 import com.screensweep.util.Permissions
@@ -18,6 +19,8 @@ class CleanWorker(context: Context, params: WorkerParameters) :
 
     override suspend fun doWork(): Result {
         val app = applicationContext
+        // 记录 Worker 真正被系统唤起的时间，便于区分“未运行”和“运行后没有可删文件”。
+        SettingsRepository(app).recordAutoCleanRun()
         if (!Permissions.hasStorageAccess(app)) return Result.success()
 
         val settings = SettingsRepository(app).settings.first()
@@ -34,12 +37,15 @@ class CleanWorker(context: Context, params: WorkerParameters) :
             settings.customFolderUris
         )
 
-        if (count > 0) {
-            val folderCheck = SettingsRepository(app).rememberImageFolders(
+        val folderCheck = if (count > 0) {
+            SettingsRepository(app).rememberImageFolders(
                 folderSnapshot
             )
-            Notifier.notifyCleanResult(app, count, bytes, folderCheck.folders)
+        } else {
+            ImageFolderCheck()
         }
+        // 即使没有过期文件也发一次结果，配合设置页时间戳让后台执行可见。
+        Notifier.notifyCleanResult(app, count, bytes, folderCheck.folders)
         return Result.success()
     }
 }
