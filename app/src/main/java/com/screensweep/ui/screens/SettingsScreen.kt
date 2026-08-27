@@ -60,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.screensweep.MainViewModel
+import com.screensweep.BuildConfig
 import com.screensweep.R
 import com.screensweep.data.ImageFolderCheck
 import com.screensweep.data.ImageSources
@@ -327,7 +328,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         Column {
                             Text("净图 · 本地图片整理", style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "v1.4.2 · 本地文件整理",
+                                "v${BuildConfig.VERSION_NAME} · 本地文件整理",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
