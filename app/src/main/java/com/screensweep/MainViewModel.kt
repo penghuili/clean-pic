@@ -62,6 +62,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         mediaRepo.queryCustomFolders(savedSettings.customFolderUris) +
                         mediaRepo.queryDownloadFiles()
                     ).distinctBy { if (it.path.isNotBlank()) it.path else it.uri.toString() }
+                        .sortedWith(
+                            compareByDescending<ShotItem> { it.addedMs }
+                                .thenBy { it.name.lowercase() }
+                        )
                 RefreshData(
                     shots = existingShots,
                     keptShots = mediaRepo.queryKeptScreenshots()

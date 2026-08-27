@@ -111,7 +111,10 @@ fun ScreenshotsScreen(vm: MainViewModel) {
         allShots.filter { it.path !in keptPaths && it.id.toString() !in keptIds }
     }
     val groups = remember(shots) {
-        shots.groupBy { dayLabel(it.addedMs) }.map { it.key to it.value }
+        shots.sortedWith(
+            compareByDescending<ShotItem> { it.addedMs }
+                .thenBy { it.name.lowercase() }
+        ).groupBy { dayLabel(it.addedMs) }.map { it.key to it.value }
     }
     val totalSize = remember(shots) { shots.sumOf { it.size } }
 
