@@ -143,6 +143,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (enabled) {
                 val s = settingsRepo.settings.first()
                 App.scheduleAutoClean(getApplication(), s.autoCleanHour, s.autoCleanMinute)
+            } else {
+                App.cancelAutoClean(getApplication())
             }
         }
     }

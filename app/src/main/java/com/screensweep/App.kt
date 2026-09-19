@@ -7,13 +7,13 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.screensweep.data.SettingsRepository
 import com.screensweep.notify.Notifier
+import com.screensweep.work.CleanAlarmScheduler
 import com.screensweep.work.CleanWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
 class App : Application() {
@@ -25,10 +25,10 @@ class App : Application() {
             val settingsRepo = SettingsRepository(this@App)
             settingsRepo.ensureDownloadSourceEnabled()
             val settings = settingsRepo.settings.first()
-            if (settingsRepo.shouldMigrateAutoCleanSchedule()) {
+            if (settings.autoCleanEnabled) {
                 scheduleAutoClean(this@App, settings.autoCleanHour, settings.autoCleanMinute)
             } else {
-                ensureAutoCleanScheduled(this@App, settings.autoCleanHour, settings.autoCleanMinute)
+                cancelAutoClean(this@App)
             }
         }
         // 1.1.0 曾注册过云端同步任务；升级后立即取消，避免已移除的 Worker 被再次唤起。
@@ -37,38 +37,34 @@ class App : Application() {
     }
 
     companion object {
+        /** 兜底任务名：精确闹钟被系统拦截时，保证当天仍然执行一次。 */
         const val AUTO_CLEAN_WORK = "auto_clean_daily"
 
-        /** 应用启动时只补齐缺失的任务，不重置已有任务的下一次执行时间。 */
-        fun ensureAutoCleanScheduled(context: Context, hour: Int, minute: Int) {
-            enqueueAutoClean(context, hour, minute, ExistingPeriodicWorkPolicy.KEEP)
-        }
+        /** 兜底任务比目标时刻晚多久执行，留给精确闹钟先跑。 */
+        private const val BACKSTOP_DELAY_MS = 15L * 60 * 1000
 
-        /** 用户修改运行时间时，立即按新的时间重新计算下一次执行。 */
+        /**
+         * 按当前设置重新对齐定时。每次调用都按本地时钟重算下一次触发时刻，
+         * 因此反复调用不会让执行时间越来越晚。
+         */
         fun scheduleAutoClean(context: Context, hour: Int, minute: Int) {
-            enqueueAutoClean(context, hour, minute, ExistingPeriodicWorkPolicy.REPLACE)
+            CleanAlarmScheduler.schedule(context, hour, minute)
+            ensureBackstopScheduled(context, hour, minute)
         }
 
-        private fun enqueueAutoClean(
-            context: Context,
-            hour: Int,
-            minute: Int,
-            policy: ExistingPeriodicWorkPolicy
-        ) {
-            val now = Calendar.getInstance()
-            val nextRun = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, hour.coerceIn(0, 23))
-                set(Calendar.MINUTE, minute.coerceIn(0, 59))
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-                if (!after(now)) add(Calendar.DAY_OF_YEAR, 1)
-            }
-            val initialDelay = (nextRun.timeInMillis - now.timeInMillis).coerceAtLeast(1_000L)
+        /** 关闭自动清理时取消闹钟，避免无意义地唤醒设备。 */
+        fun cancelAutoClean(context: Context) {
+            CleanAlarmScheduler.cancel(context)
+        }
+
+        private fun ensureBackstopScheduled(context: Context, hour: Int, minute: Int) {
+            val delay = (CleanAlarmScheduler.nextTriggerAt(hour, minute) -
+                System.currentTimeMillis()).coerceAtLeast(0L) + BACKSTOP_DELAY_MS
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 AUTO_CLEAN_WORK,
-                policy,
+                ExistingPeriodicWorkPolicy.KEEP,
                 PeriodicWorkRequestBuilder<CleanWorker>(1, TimeUnit.DAYS)
-                    .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
+                    .setInitialDelay(delay, TimeUnit.MILLISECONDS)
                     .build()
             )
         }

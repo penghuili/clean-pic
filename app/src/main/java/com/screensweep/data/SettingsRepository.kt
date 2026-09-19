@@ -41,7 +41,6 @@ class SettingsRepository(private val context: Context) {
         val DAYS = intPreferencesKey("retain_days")
         val AUTO_HOUR = intPreferencesKey("auto_clean_hour")
         val AUTO_MINUTE = intPreferencesKey("auto_clean_minute")
-        val AUTO_SCHEDULE_VERSION = intPreferencesKey("auto_clean_schedule_version")
         val LAST_AUTO_CLEAN_AT = longPreferencesKey("last_auto_clean_at")
         val KEPT_PATHS = stringSetPreferencesKey("kept_paths")
         val KEPT_IDS = stringSetPreferencesKey("kept_ids")
@@ -72,18 +71,6 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun recordAutoCleanRun(at: Long = System.currentTimeMillis()) {
         context.dataStore.edit { it[Keys.LAST_AUTO_CLEAN_AT] = at }
-    }
-
-    /** 1.4.3 首次启动时重排一次旧任务，之后启动只保留现有任务。 */
-    suspend fun shouldMigrateAutoCleanSchedule(): Boolean {
-        var shouldMigrate = false
-        context.dataStore.edit { p ->
-            if ((p[Keys.AUTO_SCHEDULE_VERSION] ?: 0) < 1) {
-                p[Keys.AUTO_SCHEDULE_VERSION] = 1
-                shouldMigrate = true
-            }
-        }
-        return shouldMigrate
     }
 
     suspend fun ensureDownloadSourceEnabled() {

@@ -1,6 +1,8 @@
 package com.screensweep.ui.screens
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -60,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.screensweep.MainViewModel
+import com.screensweep.App
 import com.screensweep.BuildConfig
 import com.screensweep.R
 import com.screensweep.data.ImageFolderCheck
@@ -69,6 +72,7 @@ import com.screensweep.ui.components.OnResumeEffect
 import com.screensweep.util.Permissions
 import com.screensweep.util.approximateSize
 import com.screensweep.util.formatDateTime
+import com.screensweep.work.CleanAlarmScheduler
 import kotlin.math.roundToInt
 import java.util.Locale
 
@@ -82,9 +86,17 @@ fun SettingsScreen(vm: MainViewModel) {
 
     var storageOk by remember { mutableStateOf(Permissions.hasStorageAccess(context)) }
     var notifOk by remember { mutableStateOf(Permissions.hasNotificationAccess(context)) }
+    var exactAlarmOk by remember { mutableStateOf(Permissions.canScheduleExactAlarms(context)) }
+    var batteryOk by remember { mutableStateOf(Permissions.ignoresBatteryOptimizations(context)) }
     OnResumeEffect {
         storageOk = Permissions.hasStorageAccess(context)
         notifOk = Permissions.hasNotificationAccess(context)
+        exactAlarmOk = Permissions.canScheduleExactAlarms(context)
+        batteryOk = Permissions.ignoresBatteryOptimizations(context)
+        // 从系统设置返回时按最新权限重新对齐定时（重复调用不会推迟执行时间）。
+        s?.takeIf { it.autoCleanEnabled }?.let {
+            App.scheduleAutoClean(context, it.autoCleanHour, it.autoCleanMinute)
+        }
     }
 
     var message by remember { mutableStateOf<String?>(null) }
@@ -158,6 +170,33 @@ fun SettingsScreen(vm: MainViewModel) {
                                 context.startActivity(Permissions.appNotificationSettingsIntent(context))
                             }
                         }
+                    )
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                        PermissionRow(
+                            label = "精确闹钟",
+                            ok = exactAlarmOk,
+                            okText = "已允许",
+                            onRequest = { openSettings(context, Permissions.exactAlarmSettingsIntent(context)) }
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                    PermissionRow(
+                        label = "忽略电池优化",
+                        ok = batteryOk,
+                        okText = "已忽略",
+                        onRequest = {
+                            openSettings(
+                                context,
+                                Permissions.batteryOptimizationSettingsIntent(context)
+                            )
+                        }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "在小米、华为等系统上，还需要在系统设置里允许应用自启动和后台运行，定时任务才会准时。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -266,6 +305,35 @@ fun SettingsScreen(vm: MainViewModel) {
                         Icon(Icons.Rounded.AccessTime, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
                         Text("每天 ${formatTime(s.autoCleanHour, s.autoCleanMinute)} 运行")
+                    }
+                    if (s.autoCleanEnabled) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "下次运行：" + formatDateTime(
+                                CleanAlarmScheduler.nextTriggerAt(
+                                    s.autoCleanHour,
+                                    s.autoCleanMinute
+                                )
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (Build.VERSION.SDK_INT >= 31 && !exactAlarmOk) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "未允许「精确闹钟」，系统可能延后执行，只能保证当天内完成。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            TextButton(
+                                onClick = {
+                                    openSettings(
+                                        context,
+                                        Permissions.exactAlarmSettingsIntent(context)
+                                    )
+                                }
+                            ) { Text("去允许准时运行") }
+                        }
                     }
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(
@@ -535,8 +603,21 @@ private fun SettingsCard(title: String, content: @Composable () -> Unit) {
 private fun formatTime(hour: Int, minute: Int): String =
     String.format(Locale.ROOT, "%02d:%02d", hour, minute)
 
+/** 少数系统缺少对应的设置页，打不开时忽略即可。 */
+private fun openSettings(context: Context, intent: Intent) {
+    try {
+        context.startActivity(intent)
+    } catch (_: Exception) {
+    }
+}
+
 @Composable
-private fun PermissionRow(label: String, ok: Boolean, onRequest: () -> Unit) {
+private fun PermissionRow(
+    label: String,
+    ok: Boolean,
+    onRequest: () -> Unit,
+    okText: String = "已授权"
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
             if (ok) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
@@ -551,7 +632,7 @@ private fun PermissionRow(label: String, ok: Boolean, onRequest: () -> Unit) {
             TextButton(onClick = onRequest) { Text("去开启") }
         } else {
             Text(
-                "已授权",
+                okText,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
