@@ -35,7 +35,7 @@
 
 无网络权限、无定位、无任何后台上报。
 
-> 定时使用 `AlarmManager.setExactAndAllowWhileIdle` 精确闹钟：每天按本地时钟重新计算下一次触发时刻，不会像周期任务那样把延迟累积下去。设置的运行时间是目标时刻，实际执行由系统唤起，通常在同一分钟内；设置页的“上次自动清理”和“下次运行”可用来核对。
+> 定时使用 `AlarmManager.setExactAndAllowWhileIdle` 精确闹钟：每天按本地时钟重新计算下一次触发时刻，不会像周期任务那样把延迟累积下去。设置的运行时间是目标时刻，实际执行由系统唤起，通常在同一分钟内；设置页的“上次自动清理”和“下次运行”可用来核对。定时只依赖这一条闹钟链路，没有额外的兜底任务。
 >
 > 如果发现执行时间总是偏晚，检查设置页的「精确闹钟」和「忽略电池优化」，并在系统设置里允许应用自启动、后台运行（小米、华为、OPPO、vivo 等系统默认会限制）。
 
@@ -59,4 +59,4 @@ keyPassword=***
 
 ## 技术栈
 
-Kotlin · Jetpack Compose (Material 3) · AlarmManager 精确闹钟 + WorkManager 兜底（每日定时清理） · DataStore（设置与保留列表） · Coil（缩略图）
+Kotlin · Jetpack Compose (Material 3) · AlarmManager 精确闹钟定时、WorkManager 执行清理 · DataStore（设置与保留列表） · Coil（缩略图）

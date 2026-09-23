@@ -321,7 +321,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         if (Build.VERSION.SDK_INT >= 31 && !exactAlarmOk) {
                             Spacer(Modifier.height(6.dp))
                             Text(
-                                "未允许「精确闹钟」，系统可能延后执行，只能保证当天内完成。",
+                                "未允许「精确闹钟」，系统会延后触发，执行时间可能不准。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error
                             )

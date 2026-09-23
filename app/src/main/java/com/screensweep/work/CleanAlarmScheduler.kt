@@ -56,8 +56,8 @@ object CleanAlarmScheduler {
                 // 权限在检查之后被撤销，退回下面的非精确闹钟。
             }
         }
-        // 未授予「闹钟与提醒」时只能设定不精确的闹钟：时刻仍然对准目标，
-        // 由 [com.screensweep.App.AUTO_CLEAN_WORK] 兜底任务保证当天一定执行。
+        // 未授予「闹钟与提醒」时只能设定不精确的闹钟：触发时刻仍然对准目标，
+        // 实际唤起时间由系统决定，可能会延后。
         manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
     }
 

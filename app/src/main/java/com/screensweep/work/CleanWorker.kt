@@ -17,8 +17,8 @@ import kotlinx.coroutines.flow.first
  * 每天执行一次：若用户开启了自动清理，则删除超过保留天数的文件
  * （已保留的条目永远跳过），完成后发送通知。
  *
- * 精确闹钟到点后由 [enqueueNow] 唤起本 Worker，WorkManager 的周期任务只作兜底；
- * 两个来源都按同一个目标时刻判断，保证一天只真正执行一次。
+ * 精确闹钟到点后由 [enqueueNow] 唤起本 Worker；按当天的目标时刻去重，
+ * 一天只真正执行一次。
  */
 class CleanWorker(context: Context, params: WorkerParameters) :
     CoroutineWorker(context, params) {
@@ -30,7 +30,7 @@ class CleanWorker(context: Context, params: WorkerParameters) :
         if (!settings.autoCleanEnabled) return Result.success()
         if (!Permissions.hasStorageAccess(app)) return Result.success()
 
-        // 当天目标时刻已经执行过就静默跳过，避免兜底任务重复清理和重复通知。
+        // 当天目标时刻已经执行过就静默跳过，避免重复清理和重复通知。
         val target = CleanAlarmScheduler.currentTriggerAt(
             settings.autoCleanHour,
             settings.autoCleanMinute
